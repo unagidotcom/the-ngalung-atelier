@@ -1,4 +1,4 @@
-import { createApp } from '../server';
+import { createApp } from '../server.ts';
 
 const appPromise = createApp({
   serveStatic: false,
