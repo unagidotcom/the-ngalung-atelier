@@ -1,0 +1,22 @@
+{
+  "products": [],
+  "orders": [],
+  "events": [],
+  "settings": {
+    "storeName": "The Ngalung Atelier",
+    "storeTagline": "Handcrafted Notion templates, docs, and spreadsheet systems — built to save you hours.",
+    "creatorName": "The Ngalung Atelier",
+    "creatorBio": "Dedicated to artisanal digital craftsmanship. We design calm, modular systems and templates that help consultants, founders, and creators work with clarity.",
+    "creatorAvatar": "",
+    "upiId": "ngalung.atelier@upi",
+    "merchantName": "The Ngalung Atelier",
+    "currency": "INR",
+    "testMode": true,
+    "razorpayKeyId": "",
+    "razorpayKeySecret": "",
+    "socialLinks": {},
+    "discountCodes": []
+  },
+  "customers": [],
+  "webhookEvents": []
+}

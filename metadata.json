@@ -1,0 +1,6 @@
+{
+  "name": "The Ngalung Atelier",
+  "description": "Handcrafted Notion templates, docs, and spreadsheet systems — built to save you hours. Features ticket-stub aesthetic, UPI & card checkout, instant delivery vault, and analytics dashboard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

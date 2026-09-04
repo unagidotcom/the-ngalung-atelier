@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    background-color: #FAF6EE;
+    color: #17181F;
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+.font-display {
+  font-family: 'Fraunces', Georgia, serif;
+}
+
+.font-sans {
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+.font-mono {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+/* Custom ticket perforated divider line with circular side notches */
+.ticket-divider {
+  position: relative;
+  width: 100%;
+  border-top: 1.5px dashed #D8CDB4;
+  margin: 0.75rem 0;
+}
+
+/* Scalloped edge ribbon transitioning from ink navy #17181F to paper #FAF6EE */
+.scalloped-bottom {
+  background-image: radial-gradient(circle at 10px 0, #17181F 10px, transparent 11px);
+  background-size: 20px 20px;
+  background-repeat: repeat-x;
+  height: 14px;
+  width: 100%;
+}
+
+/* Minimalist Clean Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #FAF6EE;
+}
+::-webkit-scrollbar-thumb {
+  background: #D8CDB4;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #A6A296;
+}
