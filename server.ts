@@ -18,7 +18,7 @@ import {
 import { razorpayService } from './server/razorpay';
 import { emailService } from './server/email';
 import { FileStorageService } from './server/fileStorage';
-import { getDatabaseStatus, checkDatabaseConnection, isPostgresConfigured, runMigrations } from './server/db';
+import { getActiveStore, getDatabaseStatus, checkDatabaseConnection, isPostgresConfigured, runMigrations } from './server/db';
 import { storageService } from './server/storage';
 import { Product, StoreSettings, PublicStoreInfo, Order, OrderStatus } from './src/types';
 
@@ -30,9 +30,15 @@ const upload = multer({
   }
 });
 
-async function startServer() {
+interface CreateAppOptions {
+  serveStatic?: boolean;
+  runStartupChecks?: boolean;
+}
+
+export async function createApp(options: CreateAppOptions = {}) {
+  const serveStatic = options.serveStatic ?? process.env.NODE_ENV === 'production';
+  const runStartupChecks = options.runStartupChecks ?? true;
   const app = express();
-  const PORT = 3000;
 
   // Trust proxy for HTTPS protocol resolution behind Cloud Run / reverse proxies
   app.set('trust proxy', 1);
@@ -1316,19 +1322,20 @@ async function startServer() {
       }
 
       const normalizedEmail = email.trim().toLowerCase();
-      const existing = store.getCustomerByEmail(normalizedEmail);
+      const activeStore = getActiveStore();
+      const existing = await activeStore.getCustomerByEmail(normalizedEmail);
       if (existing) {
         return res.status(400).json({ success: false, message: 'An account with this email already exists. Please sign in.' });
       }
 
       const passwordHash = await hashCustomerPassword(password);
-      const customer = store.createCustomer(name.trim(), normalizedEmail, passwordHash);
+      const customer = await activeStore.createCustomer(name.trim(), normalizedEmail, passwordHash);
 
       // Create secure customer session
       const session = createCustomerSession(customer.id, customer.email);
 
       // Asynchronously trigger welcome email (safe, non-blocking)
-      const settings = store.getSettings();
+      const settings = await activeStore.getSettings();
       emailService.sendWelcomeEmail({
         customerName: customer.name,
         customerEmail: customer.email,
@@ -1366,7 +1373,7 @@ async function startServer() {
       }
 
       const normalizedEmail = String(email).trim().toLowerCase();
-      const customer = store.getCustomerByEmail(normalizedEmail);
+      const customer = await getActiveStore().getCustomerByEmail(normalizedEmail);
 
       if (!customer) {
         return res.status(401).json({ success: false, message: 'Invalid email or password.' });
@@ -1426,7 +1433,7 @@ async function startServer() {
   });
 
   // 5. Update Customer Profile (Name update only - strict role and id isolation)
-  app.put('/api/account', requireCustomerAuth, (req: AuthenticatedCustomerRequest, res) => {
+  app.put('/api/account', requireCustomerAuth, async (req: AuthenticatedCustomerRequest, res) => {
     try {
       const customerId = req.customer!.id;
       const { name } = req.body;
@@ -1435,7 +1442,7 @@ async function startServer() {
         return res.status(400).json({ success: false, message: 'Please enter a valid name (at least 2 characters).' });
       }
 
-      const updated = store.updateCustomer(customerId, { name: name.trim() });
+      const updated = await getActiveStore().updateCustomer(customerId, { name: name.trim() });
       if (!updated) {
         return res.status(404).json({ success: false, message: 'Customer account not found.' });
       }
@@ -1475,7 +1482,7 @@ async function startServer() {
         return res.status(400).json({ success: false, message: 'New passwords do not match.' });
       }
 
-      const customer = store.getCustomerById(customerId);
+      const customer = await getActiveStore().getCustomerById(customerId);
       if (!customer) {
         return res.status(404).json({ success: false, message: 'Customer account not found.' });
       }
@@ -1486,7 +1493,7 @@ async function startServer() {
       }
 
       const newHash = await hashCustomerPassword(newPassword);
-      store.updateCustomer(customerId, { passwordHash: newHash });
+      await getActiveStore().updateCustomer(customerId, { passwordHash: newHash });
 
       res.json({ success: true, message: 'Password updated successfully.' });
     } catch (err: any) {
@@ -1495,10 +1502,10 @@ async function startServer() {
   });
 
   // 7. Authenticated Customer Purchases / Orders
-  app.get('/api/customer/orders', requireCustomerAuth, (req: AuthenticatedCustomerRequest, res) => {
+  app.get('/api/customer/orders', requireCustomerAuth, async (req: AuthenticatedCustomerRequest, res) => {
     try {
       const customer = req.customer!;
-      const orders = store.getOrdersByCustomer({ id: customer.id, email: customer.email });
+      const orders = await getActiveStore().getOrdersByCustomer({ id: customer.id, email: customer.email });
 
       res.json({
         success: true,
@@ -2113,7 +2120,7 @@ async function startServer() {
       appType: 'spa',
     });
     app.use(vite.middlewares);
-  } else {
+  } else if (serveStatic) {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
@@ -2122,7 +2129,7 @@ async function startServer() {
   }
 
   // Database Initialization & Startup Verification
-  if (isPostgresConfigured()) {
+  if (runStartupChecks && isPostgresConfigured()) {
     console.log('[DATABASE] PostgreSQL connection string detected (DATABASE_URL). Checking connection...');
     checkDatabaseConnection().then(async (status) => {
       if (status.status === 'CONNECTED') {
@@ -2139,13 +2146,20 @@ async function startServer() {
     }).catch(err => {
       console.error('[DATABASE ERROR]:', err.message);
     });
-  } else {
+  } else if (runStartupChecks) {
     if (process.env.NODE_ENV === 'production') {
       console.warn('[DATABASE WARNING] DATABASE_URL is not set in production. Local JSON datastore fallback active.');
     } else {
       console.log('[DATASTORE] Running in development mode with local JSON datastore (data/db.json).');
     }
   }
+
+  return app;
+}
+
+export async function startServer() {
+  const app = await createApp({ serveStatic: true, runStartupChecks: true });
+  const PORT = parseInt(process.env.PORT || '3000', 10);
 
   app.listen(PORT, '0.0.0.0', () => {
     // Object Storage Initialization & Verification
@@ -2162,6 +2176,8 @@ async function startServer() {
   });
 }
 
-startServer().catch(err => {
-  console.error('Failed to start server:', err);
-});
+if (process.env.VERCEL !== '1') {
+  startServer().catch(err => {
+    console.error('Failed to start server:', err);
+  });
+}

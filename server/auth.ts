@@ -17,12 +17,57 @@ export interface AdminSession {
 
 // In-memory active session store with automatic TTL management
 const activeSessions = new Map<string, AdminSession>();
+const revokedSessions = new Map<string, number>();
 
 // Session duration: 24 hours
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 
 // Configuration read from environment variables only.
 const SESSION_SECRET = process.env.SESSION_SECRET || '';
+
+function encodePayload(payload: unknown): string {
+  return Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+}
+
+function signPayload(encodedPayload: string): string {
+  return crypto
+    .createHmac('sha256', SESSION_SECRET)
+    .update(encodedPayload)
+    .digest('base64url');
+}
+
+function readSignedAdminSession(token: string): AdminSession | null {
+  if (!SESSION_SECRET || !token.startsWith('adm_sess_') || !token.includes('.')) return null;
+
+  const raw = token.slice('adm_sess_'.length);
+  const [encodedPayload, signature] = raw.split('.');
+  if (!encodedPayload || !signature) return null;
+
+  const expected = signPayload(encodedPayload);
+  const provided = Buffer.from(signature);
+  const valid = Buffer.from(expected);
+  if (provided.length !== valid.length || !crypto.timingSafeEqual(provided, valid)) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8'));
+    if (parsed?.type !== 'admin' || parsed?.user?.role !== 'admin' || !parsed.expiresAt) return null;
+    return {
+      token,
+      user: {
+        id: String(parsed.user.id),
+        email: String(parsed.user.email),
+        name: String(parsed.user.name),
+        role: 'admin'
+      },
+      createdAt: Number(parsed.createdAt || Date.now()),
+      expiresAt: Number(parsed.expiresAt)
+    };
+  } catch {
+    return null;
+  }
+}
 
 function getAdminEmails(): string[] {
   const envEmail = process.env.ADMIN_EMAIL ? process.env.ADMIN_EMAIL.trim().toLowerCase() : '';
@@ -64,17 +109,24 @@ export const authService = {
     // Clean up expired sessions periodically
     this.cleanupExpiredSessions();
 
-    // Create cryptographically random session token (256-bit entropy)
-    const token = 'adm_sess_' + crypto.randomBytes(32).toString('hex');
     const now = Date.now();
+    const user: AdminUser = {
+      id: 'admin_master_1',
+      email: normalizedEmail,
+      name: 'Atelier Administrator',
+      role: 'admin'
+    };
+    const payload = {
+      type: 'admin',
+      user,
+      createdAt: now,
+      expiresAt: now + SESSION_TTL_MS
+    };
+    const encodedPayload = encodePayload(payload);
+    const token = `adm_sess_${encodedPayload}.${signPayload(encodedPayload)}`;
     const session: AdminSession = {
       token,
-      user: {
-        id: 'admin_master_1',
-        email: normalizedEmail,
-        name: 'Atelier Administrator',
-        role: 'admin'
-      },
+      user,
       createdAt: now,
       expiresAt: now + SESSION_TTL_MS
     };
@@ -86,12 +138,14 @@ export const authService = {
   // Validate an active session token
   validateSession(token: string): AdminSession | null {
     if (!token) return null;
+    if (revokedSessions.has(token)) return null;
 
-    const session = activeSessions.get(token);
+    const session = activeSessions.get(token) || readSignedAdminSession(token);
     if (!session) return null;
 
     if (Date.now() > session.expiresAt) {
       activeSessions.delete(token);
+      revokedSessions.delete(token);
       return null;
     }
 
@@ -101,7 +155,11 @@ export const authService = {
   // Destroy a session on logout
   destroySession(token: string): boolean {
     if (!token) return false;
-    return activeSessions.delete(token);
+    const session = activeSessions.get(token) || readSignedAdminSession(token);
+    if (session) {
+      revokedSessions.set(token, session.expiresAt);
+    }
+    return activeSessions.delete(token) || Boolean(session);
   },
 
   // Cleanup expired sessions
@@ -110,6 +168,11 @@ export const authService = {
     for (const [token, session] of activeSessions.entries()) {
       if (now > session.expiresAt) {
         activeSessions.delete(token);
+      }
+    }
+    for (const [token, expiresAt] of revokedSessions.entries()) {
+      if (now > expiresAt) {
+        revokedSessions.delete(token);
       }
     }
   }
