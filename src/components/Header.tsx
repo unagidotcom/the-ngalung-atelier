@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Package, Info, KeyRound, ArrowLeft, ArrowUpRight, User, LogIn, LogOut, UserPlus } from 'lucide-react';
+import { Home, Package, Info, KeyRound, ArrowLeft, LogIn, LogOut, ShieldCheck, UserPlus } from 'lucide-react';
 import { PublicStoreInfo, StoreSettings, CustomerUser } from '../types';
 import { LogoMark } from './LogoMark';
 
@@ -181,6 +181,20 @@ export const Header: React.FC<HeaderProps> = ({
           ) : (
             <div className="flex items-center gap-1.5">
               <button
+                id="header-admin-login-btn"
+                type="button"
+                onClick={() => onNavigate('admin')}
+                className={`hidden sm:flex items-center gap-1 rounded-full px-3.5 py-1.5 text-xs font-bold transition-all cursor-pointer ${
+                  currentView === 'admin'
+                    ? 'bg-[#FF5A36] text-white shadow-2xs'
+                    : 'border border-[#E7DFCE] bg-[#FFFFFF] text-[#17181F] hover:bg-[#F3EDE0] shadow-2xs'
+                }`}
+              >
+                <ShieldCheck className="h-3.5 w-3.5 text-[#FF5A36]" />
+                <span>Admin</span>
+              </button>
+
+              <button
                 id="header-signin-btn"
                 type="button"
                 onClick={() => onNavigate('login')}
@@ -259,6 +273,14 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       ) : (
         <div className="flex items-center justify-around border-t border-[#E7DFCE] bg-[#FAF6EE] px-2 py-1.5 sm:hidden">
+          <button
+            onClick={() => onNavigate('admin')}
+            className={`px-3 py-1.5 text-xs font-bold ${
+              currentView === 'admin' ? 'text-[#FF5A36]' : 'text-[#6E6C63]'
+            }`}
+          >
+            Admin
+          </button>
           <button
             onClick={() => onNavigate('login')}
             className={`px-3 py-1.5 text-xs font-bold ${

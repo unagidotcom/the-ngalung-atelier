@@ -290,6 +290,7 @@ export default function App() {
                 settings={storeInfo}
                 onNavigateLogin={() => navigate('login')}
                 onNavigateRegister={() => navigate('register')}
+                onNavigateAdmin={() => navigate('admin')}
               />
             )}
 
@@ -311,6 +312,7 @@ export default function App() {
                   settings={storeInfo}
                   onNavigateLogin={() => navigate('login')}
                   onNavigateRegister={() => navigate('register')}
+                  onNavigateAdmin={() => navigate('admin')}
                 />
               )
             )}
