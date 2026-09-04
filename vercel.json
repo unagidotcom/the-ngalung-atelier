@@ -1,4 +1,13 @@
 {
+  "functions": {
+    "api/[...path].js": {
+      "includeFiles": [
+        "dist/server.cjs",
+        "data/db.json",
+        "server/db/migrations/**"
+      ]
+    }
+  },
   "rewrites": [
     {
       "source": "/((?!api/.*).*)",
