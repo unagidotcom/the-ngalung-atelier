@@ -2113,7 +2113,7 @@ export async function createApp(options: CreateAppOptions = {}) {
   // ==========================================
   // VITE & STATIC SERVING
   // ==========================================
-  if (process.env.NODE_ENV !== 'production') {
+  if (process.env.NODE_ENV !== 'production' && process.env.VERCEL !== '1') {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
