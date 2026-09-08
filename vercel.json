@@ -1,10 +1,17 @@
 {
   "functions": {
+    "api/index.js": {
+      "includeFiles": "{dist/server.cjs,data/db.json,server/db/migrations/**}"
+    },
     "api/[...path].js": {
       "includeFiles": "{dist/server.cjs,data/db.json,server/db/migrations/**}"
     }
   },
   "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "/api?path=:path*"
+    },
     {
       "source": "/((?!api/.*).*)",
       "destination": "/index.html"
