@@ -41,7 +41,7 @@ export const StorefrontHome: React.FC<StorefrontHomeProps> = ({
     { id: 'ALL', label: 'All Systems' },
     { id: 'Template', label: 'Notion & Sheets' },
     { id: 'Bundle', label: 'All-Access Pass' },
-    { id: 'Ebook', label: 'Legal & Docs' },
+    { id: 'Ebook', label: 'Ebooks' },
     { id: 'Code', label: 'Architecture & Code' },
     { id: 'Design', label: 'Design Tokens' }
   ];

@@ -665,6 +665,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white"
                   >
                     <option value="Template">Template</option>
+                    <option value="Ebook">Ebook</option>
                     <option value="Audio / Sample Pack">Audio / Sample Pack</option>
                     <option value="Preset Pack">Preset Pack</option>
                     <option value="Design Asset">Design Asset</option>
@@ -762,13 +763,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2">
                 <label className="block font-bold text-slate-700">Digital Product Vault File</label>
                 <p className="text-[11px] text-slate-500">
-                  Upload the digital asset file (.zip, .pdf, .json, .fig). The file is stored in a private secure vault and accessible only to verified buyers.
+                  Upload the digital asset file (.zip, .pdf, .epub, .mobi, .json, .fig). The file is stored in a private secure vault and accessible only to verified buyers.
                 </p>
                 <div className="flex items-center gap-3 pt-1">
                   <input
                     type="file"
                     ref={fileInputRef}
                     onChange={handleProductFileUpload}
+                    accept=".pdf,.zip,.rar,.7z,.tar,.gz,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.md,.epub,.mobi,.mp4,.mov,.avi,.mkv,.mp3,.wav,.png,.jpg,.jpeg,.webp,.svg,.psd,.ai,.fig,.sketch,.json"
                     className="text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-emerald-600 file:text-white hover:file:bg-emerald-700"
                   />
                   {isUploadingFile && <RefreshCw className="w-4 h-4 animate-spin text-emerald-600" />}

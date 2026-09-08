@@ -141,7 +141,7 @@ export class StorageService implements IObjectStorageService {
     if (!ALLOWED_PRODUCT_EXTENSIONS.has(ext)) {
       return {
         valid: false,
-        error: `File type ${ext} is not supported. Please upload a PDF, ZIP, DOCX, XLSX, MP4, EPUB, or standard digital asset format.`
+        error: `File type ${ext} is not supported. Please upload a PDF, EPUB, MOBI, ZIP, DOCX, XLSX, MP4, or standard digital asset format.`
       };
     }
 
