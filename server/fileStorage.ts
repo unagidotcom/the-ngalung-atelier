@@ -1,11 +1,14 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import os from 'os';
 import { UploadedFileMetadata } from '../src/types';
 import { storageService, StorageService } from './storage';
 
 // Dedicated storage directories
-const STORAGE_ROOT = path.join(process.cwd(), 'storage');
+const STORAGE_ROOT = process.env.VERCEL === '1'
+  ? path.join(os.tmpdir(), 'ngalung-atelier-storage')
+  : path.join(process.cwd(), 'storage');
 const PRIVATE_FILES_DIR = path.join(STORAGE_ROOT, 'private_products');
 const PUBLIC_COVERS_DIR = path.join(STORAGE_ROOT, 'public_covers');
 

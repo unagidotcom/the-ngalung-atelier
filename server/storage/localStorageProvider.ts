@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import os from 'os';
 import { Readable } from 'stream';
 import {
   IObjectStorageService,
@@ -16,7 +17,11 @@ export class LocalStorageProvider implements IObjectStorageService {
   private readonly baseDir: string;
 
   constructor(baseDir?: string) {
-    this.baseDir = baseDir || path.join(process.cwd(), 'storage', 'private_products');
+    const runtimeStorageRoot = process.env.VERCEL === '1'
+      ? path.join(os.tmpdir(), 'ngalung-atelier-storage')
+      : path.join(process.cwd(), 'storage');
+
+    this.baseDir = baseDir || path.join(runtimeStorageRoot, 'private_products');
     if (!fs.existsSync(this.baseDir)) {
       fs.mkdirSync(this.baseDir, { recursive: true });
     }
