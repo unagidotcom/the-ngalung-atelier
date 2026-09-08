@@ -3,7 +3,6 @@ import express from 'express';
 import path from 'path';
 import crypto from 'crypto';
 import multer from 'multer';
-import { createServer as createViteServer } from 'vite';
 import { store } from './server/dataStore';
 import { authService, requireAdmin } from './server/auth';
 import {
@@ -2115,6 +2114,7 @@ export async function createApp(options: CreateAppOptions = {}) {
   // VITE & STATIC SERVING
   // ==========================================
   if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
