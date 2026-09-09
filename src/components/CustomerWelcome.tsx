@@ -25,7 +25,8 @@ interface CustomerWelcomeProps {
 export const CustomerWelcome: React.FC<CustomerWelcomeProps> = ({
   settings,
   onNavigateLogin,
-  onNavigateRegister
+  onNavigateRegister,
+  onNavigateAdmin
 }) => {
   const storeName = settings?.storeName || 'The Ngalung Atelier';
   const tagline = settings?.storeTagline || 'Handcrafted Notion templates, docs, and spreadsheet systems';
@@ -83,6 +84,17 @@ export const CustomerWelcome: React.FC<CustomerWelcomeProps> = ({
                 <UserPlus className="h-4 w-4 text-[#FFE7DD]" />
                 <span>Create Account</span>
               </button>
+              {onNavigateAdmin && (
+                <button
+                  id="homepage-admin-login-btn"
+                  type="button"
+                  onClick={onNavigateAdmin}
+                  className="inline-flex items-center justify-center gap-2 rounded-full border border-[#3D4250] bg-transparent px-6 py-3.5 text-sm font-bold text-[#D8D1C3] transition hover:bg-[#1A1F2B] hover:text-[#FAF6EE]"
+                >
+                  <LayoutDashboard className="h-4 w-4 text-[#F2A93B]" />
+                  <span>Admin Login</span>
+                </button>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-2.5 pt-1 sm:grid-cols-4">
