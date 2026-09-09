@@ -1,6 +1,19 @@
 import handleApiRequest from './_handler.js';
 
 export default async function handler(req, res) {
+  const renderPath = req.query?.render;
+
+  if (renderPath) {
+    const pathValue = Array.isArray(renderPath)
+      ? renderPath.join('/')
+      : String(renderPath);
+    const url = new URL(req.url || '/', 'http://localhost');
+    url.searchParams.delete('render');
+    const search = url.searchParams.toString();
+
+    req.url = `/${pathValue}${search ? `?${search}` : ''}`;
+  }
+
   const rewrittenPath = req.query?.path;
 
   if (rewrittenPath) {

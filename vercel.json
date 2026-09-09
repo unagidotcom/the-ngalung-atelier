@@ -13,6 +13,22 @@
       "destination": "/api?path=:path*"
     },
     {
+      "source": "/articles",
+      "destination": "/api?render=articles"
+    },
+    {
+      "source": "/articles/:slug*",
+      "destination": "/api?render=articles/:slug*"
+    },
+    {
+      "source": "/sitemap.xml",
+      "destination": "/api?render=sitemap.xml"
+    },
+    {
+      "source": "/robots.txt",
+      "destination": "/api?render=robots.txt"
+    },
+    {
       "source": "/((?!api/.*).*)",
       "destination": "/index.html"
     }
