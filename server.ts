@@ -19,7 +19,7 @@ import { emailService } from './server/email';
 import { FileStorageService } from './server/fileStorage';
 import { getActiveStore, getDatabaseStatus, checkDatabaseConnection, isPostgresConfigured, runMigrations } from './server/db';
 import { storageService } from './server/storage';
-import { Product, StoreSettings, PublicStoreInfo, Order, OrderStatus, Article } from './src/types';
+import { Product, StoreSettings, PublicStoreInfo, Order, OrderStatus, Article, ArticleReviewStatus } from './src/types';
 import { calculateReadingTime, renderArticleMarkdown } from './src/lib/articleMarkdown';
 
 // Configure multer in-memory storage for safe inspection and storage delegation
@@ -430,6 +430,13 @@ export async function createApp(options: CreateAppOptions = {}) {
     } catch (err: any) {
       res.status(500).send('Unable to load articles.');
     }
+  });
+
+  app.get(['/articles/write', '/account/articles'], (req, res, next) => {
+    if (serveStatic || process.env.NODE_ENV === 'production' || process.env.VERCEL === '1') {
+      return res.sendFile(path.join(process.cwd(), 'dist', 'index.html'));
+    }
+    return next();
   });
 
   app.get('/articles/:slug', async (req, res, next) => {
@@ -1810,6 +1817,195 @@ ${urls.map(url => `  <url><loc>${xmlEscape(url.loc)}</loc><lastmod>${xmlEscape(n
     }
   });
 
+  // 8. Paid Article Submission Configuration (safe public details only)
+  app.get('/api/articles/submission/config', async (_req, res) => {
+    try {
+      const config = await getActiveStore().getArticleSubmissionConfig();
+      res.json({
+        success: true,
+        config: {
+          enabled: Boolean(config.enabled),
+          priceINR: Number(config.priceINR || 999),
+          currency: 'INR',
+          guidelines: config.guidelines || ''
+        },
+        payment: {
+          configured: razorpayService.isConfigured(),
+          keyId: razorpayService.getPublicKeyId()
+        }
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // 9. Customer Article Submission Payment Order
+  app.post('/api/articles/submission/create-order', requireCustomerAuth, async (req: AuthenticatedCustomerRequest, res) => {
+    try {
+      const customer = req.customer!;
+      const config = await getActiveStore().getArticleSubmissionConfig();
+      const priceINR = Math.max(1, Math.round(Number(config.priceINR || 999)));
+
+      if (!config.enabled) {
+        return res.status(400).json({ success: false, message: 'Article submissions are currently closed.' });
+      }
+
+      if (!razorpayService.isConfigured()) {
+        return res.status(503).json({
+          success: false,
+          error: 'PAYMENT_UNAVAILABLE',
+          message: 'Article submission payment is temporarily unavailable.'
+        });
+      }
+
+      const orderReference = `ART-${Date.now()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+      const rzpResult = await razorpayService.createOrder({
+        amount: priceINR,
+        currency: 'INR',
+        receipt: orderReference,
+        notes: {
+          type: 'article_submission',
+          entitlementType: 'single_article_submission',
+          customerId: customer.id,
+          customerEmail: customer.email
+        }
+      });
+
+      const entitlement = await getActiveStore().createPendingArticleEntitlement({
+        customerId: customer.id,
+        customerEmail: customer.email,
+        amountINR: priceINR,
+        razorpayOrderId: rzpResult.razorpayOrderId,
+        orderReference
+      });
+
+      res.json({
+        success: true,
+        entitlementId: entitlement.id,
+        orderReference,
+        amountINR: priceINR,
+        amount: rzpResult.amountInSubunits,
+        currency: 'INR',
+        razorpay: {
+          orderId: rzpResult.razorpayOrderId,
+          amount: rzpResult.amountInSubunits,
+          currency: 'INR',
+          keyId: razorpayService.getPublicKeyId()
+        }
+      });
+    } catch (err: any) {
+      console.error('Article submission order error:', err);
+      res.status(500).json({ success: false, message: err.message || 'Unable to start article submission payment.' });
+    }
+  });
+
+  // 10. Customer Article Submission Payment Verification
+  app.post('/api/articles/submission/verify', requireCustomerAuth, async (req: AuthenticatedCustomerRequest, res) => {
+    try {
+      const customer = req.customer!;
+      const {
+        razorpayOrderId,
+        razorpay_order_id,
+        razorpayPaymentId,
+        razorpay_payment_id,
+        razorpaySignature,
+        razorpay_signature
+      } = req.body || {};
+
+      const targetOrderId = String(razorpay_order_id || razorpayOrderId || '');
+      const targetPaymentId = String(razorpay_payment_id || razorpayPaymentId || '');
+      const targetSignature = String(razorpay_signature || razorpaySignature || '');
+
+      const verification = razorpayService.verifyPaymentSignature({
+        razorpayOrderId: targetOrderId,
+        razorpayPaymentId: targetPaymentId,
+        razorpaySignature: targetSignature
+      });
+
+      if (!verification.valid) {
+        return res.status(400).json({
+          success: false,
+          error: 'SIGNATURE_VERIFICATION_FAILED',
+          message: verification.error || 'Payment signature verification failed.'
+        });
+      }
+
+      const entitlement = await getActiveStore().verifyArticleEntitlement({
+        customerId: customer.id,
+        razorpayOrderId: targetOrderId,
+        razorpayPaymentId: targetPaymentId
+      });
+
+      if (!entitlement) {
+        return res.status(404).json({ success: false, message: 'Article submission credit was not found for this customer.' });
+      }
+
+      res.json({ success: true, entitlement, message: 'Article submission credit is ready.' });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message || 'Unable to verify article submission payment.' });
+    }
+  });
+
+  // 11. Customer Articles: own drafts, review status, and credits
+  app.get('/api/customer/articles', requireCustomerAuth, async (req: AuthenticatedCustomerRequest, res) => {
+    try {
+      const customer = req.customer!;
+      const [articles, entitlements, config] = await Promise.all([
+        getActiveStore().getCustomerArticles(customer.id),
+        getActiveStore().getArticleEntitlementsByCustomer(customer.id),
+        getActiveStore().getArticleSubmissionConfig()
+      ]);
+      res.json({
+        success: true,
+        articles,
+        entitlements,
+        config: {
+          enabled: Boolean(config.enabled),
+          priceINR: Number(config.priceINR || 999),
+          currency: 'INR',
+          guidelines: config.guidelines || ''
+        }
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message || 'Failed to load customer articles.' });
+    }
+  });
+
+  app.post('/api/customer/articles', requireCustomerAuth, async (req: AuthenticatedCustomerRequest, res) => {
+    try {
+      const customer = req.customer!;
+      const article = await getActiveStore().saveCustomerArticle(customer, req.body as Partial<Article>);
+      res.json({ success: true, article });
+    } catch (err: any) {
+      const message = err.message || 'Failed to save article draft.';
+      res.status(message.includes('credit') ? 402 : 400).json({ success: false, message });
+    }
+  });
+
+  app.put('/api/customer/articles/:id', requireCustomerAuth, async (req: AuthenticatedCustomerRequest, res) => {
+    try {
+      const customer = req.customer!;
+      const article = await getActiveStore().saveCustomerArticle(customer, {
+        ...(req.body as Partial<Article>),
+        id: req.params.id
+      });
+      res.json({ success: true, article });
+    } catch (err: any) {
+      res.status(400).json({ success: false, message: err.message || 'Failed to update article draft.' });
+    }
+  });
+
+  app.post('/api/customer/articles/:id/submit', requireCustomerAuth, async (req: AuthenticatedCustomerRequest, res) => {
+    try {
+      const customer = req.customer!;
+      const result = await getActiveStore().submitCustomerArticle(customer.id, req.params.id);
+      if (!result.success) return res.status(400).json(result);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message || 'Failed to submit article.' });
+    }
+  });
+
   // ==========================================
   // ADMIN AUTHENTICATION API ROUTES
   // ==========================================
@@ -1943,6 +2139,44 @@ ${urls.map(url => `  <url><loc>${xmlEscape(url.loc)}</loc><lastmod>${xmlEscape(n
       const result = await getActiveStore().archiveArticle(req.params.id);
       if (!result.success) return res.status(404).json(result);
       res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post('/api/admin/articles/:id/review', requireAdmin, async (req, res) => {
+    try {
+      const allowed: ArticleReviewStatus[] = ['under_review', 'changes_requested', 'approved', 'rejected', 'published', 'archived'];
+      const reviewStatus = req.body?.reviewStatus as ArticleReviewStatus;
+      const feedback = typeof req.body?.feedback === 'string' ? req.body.feedback : undefined;
+      if (!allowed.includes(reviewStatus)) {
+        return res.status(400).json({ success: false, message: 'Unsupported article review status.' });
+      }
+
+      const result = await getActiveStore().updateArticleReview(req.params.id, reviewStatus, feedback);
+      if (!result.success) return res.status(404).json(result);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post('/api/admin/articles/:id/schedule', requireAdmin, async (req, res) => {
+    try {
+      const scheduledAt = req.body?.scheduledAt ? new Date(req.body.scheduledAt) : null;
+      if (!scheduledAt || Number.isNaN(scheduledAt.getTime())) {
+        return res.status(400).json({ success: false, message: 'A valid schedule date is required.' });
+      }
+      const current = await getActiveStore().getArticleById(req.params.id) || await getActiveStore().getArticleBySlug(req.params.id, true);
+      if (!current) return res.status(404).json({ success: false, message: 'Article not found' });
+
+      const article = await getActiveStore().saveArticle({
+        ...current,
+        status: 'draft',
+        reviewStatus: current.source === 'customer' ? 'approved' : current.reviewStatus || 'draft',
+        scheduledAt: scheduledAt.toISOString()
+      });
+      res.json({ success: true, article, message: 'Article scheduled.' });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }
@@ -2430,7 +2664,7 @@ ${urls.map(url => `  <url><loc>${xmlEscape(url.loc)}</loc><lastmod>${xmlEscape(n
   // Admin Store Settings (Admin only)
   app.get('/api/admin/settings', requireAdmin, async (req, res) => {
     try {
-      const settings = store.getSettings();
+      const settings = await getActiveStore().getSettings();
       const gatewayStatus = razorpayService.getGatewayStatus();
       const emailStatus = emailService.getStatus();
       const dbStatus = await getDatabaseStatus();
@@ -2457,9 +2691,9 @@ ${urls.map(url => `  <url><loc>${xmlEscape(url.loc)}</loc><lastmod>${xmlEscape(n
   });
 
   // Update Admin Store Settings (Admin only)
-  app.post('/api/admin/settings', requireAdmin, (req, res) => {
+  app.post('/api/admin/settings', requireAdmin, async (req, res) => {
     try {
-      const updated = store.updateSettings(req.body as Partial<StoreSettings>);
+      const updated = await getActiveStore().updateSettings(req.body as Partial<StoreSettings>);
       res.json({ success: true, settings: updated });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });

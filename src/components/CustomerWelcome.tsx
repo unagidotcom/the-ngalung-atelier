@@ -6,10 +6,8 @@ import {
   FileText,
   KeyRound,
   LayoutDashboard,
-  Lock,
   LogIn,
   PackageCheck,
-  ShieldCheck,
   Sparkles,
   UserPlus,
   WalletCards
@@ -21,14 +19,13 @@ interface CustomerWelcomeProps {
   settings?: StoreSettings | PublicStoreInfo | null;
   onNavigateLogin: () => void;
   onNavigateRegister: () => void;
-  onNavigateAdmin: () => void;
+  onNavigateAdmin?: () => void;
 }
 
 export const CustomerWelcome: React.FC<CustomerWelcomeProps> = ({
   settings,
   onNavigateLogin,
-  onNavigateRegister,
-  onNavigateAdmin
+  onNavigateRegister
 }) => {
   const storeName = settings?.storeName || 'The Ngalung Atelier';
   const tagline = settings?.storeTagline || 'Handcrafted Notion templates, docs, and spreadsheet systems';
@@ -143,17 +140,6 @@ export const CustomerWelcome: React.FC<CustomerWelcomeProps> = ({
                 </div>
               </div>
             </div>
-
-            <button
-              id="homepage-admin-login-btn"
-              type="button"
-              onClick={onNavigateAdmin}
-              className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-[#D8CDB4] bg-[#FFFFFF] px-4 py-3 text-xs font-bold text-[#17181F] shadow-xs transition hover:border-[#17181F] hover:bg-[#F3EDE0]"
-            >
-              <Lock className="h-4 w-4 text-[#FF5A36]" />
-              <span>Admin Login</span>
-              <ShieldCheck className="h-4 w-4 text-[#1F8F5F]" />
-            </button>
           </div>
         </div>
       </section>

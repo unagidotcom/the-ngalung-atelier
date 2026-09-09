@@ -20,7 +20,8 @@ import {
   Database,
   HardDrive,
   FolderLock,
-  FileCheck
+  FileCheck,
+  FilePenLine
 } from 'lucide-react';
 import { StoreSettings, PaymentGatewayStatus } from '../../types';
 import { updateStoreSettings, testRazorpayConnection } from '../../lib/api';
@@ -370,6 +371,77 @@ export const SettingsSection: React.FC<SettingsSectionProps> = ({
               <span>
                 Razorpay API secrets and webhook keys are securely stored on the server environment. Secrets are never exposed to the frontend browser, preserving bank-grade security standards.
               </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Paid Article Submission Settings Card */}
+        <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <FilePenLine className="w-4 h-4 text-[#FF5A36]" />
+              <h2 className="text-base font-bold text-slate-900">Paid Customer Article Submissions</h2>
+            </div>
+            <label className="inline-flex items-center gap-2 rounded-full bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-700 border border-slate-200">
+              <input
+                type="checkbox"
+                checked={formData.articleSubmission?.enabled ?? true}
+                onChange={e => setFormData({
+                  ...formData,
+                  articleSubmission: {
+                    enabled: e.target.checked,
+                    priceINR: formData.articleSubmission?.priceINR || 999,
+                    currency: 'INR',
+                    guidelines: formData.articleSubmission?.guidelines || ''
+                  }
+                })}
+                className="h-4 w-4 accent-emerald-600"
+              />
+              Enabled
+            </label>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-[220px_1fr] gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Price in INR</label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-500">₹</span>
+                <input
+                  type="number"
+                  min="1"
+                  value={formData.articleSubmission?.priceINR || 999}
+                  onChange={e => setFormData({
+                    ...formData,
+                    articleSubmission: {
+                      enabled: formData.articleSubmission?.enabled ?? true,
+                      priceINR: Math.max(1, Number(e.target.value || 1)),
+                      currency: 'INR',
+                      guidelines: formData.articleSubmission?.guidelines || ''
+                    }
+                  })}
+                  className="w-full pl-7 pr-3.5 py-2 text-xs font-bold border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-slate-50 focus:bg-white"
+                />
+              </div>
+              <p className="mt-2 text-[11px] leading-4 text-slate-500">The browser price is ignored. This server-side value is used for Razorpay orders.</p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Submission Guidelines</label>
+              <textarea
+                rows={4}
+                value={formData.articleSubmission?.guidelines || ''}
+                onChange={e => setFormData({
+                  ...formData,
+                  articleSubmission: {
+                    enabled: formData.articleSubmission?.enabled ?? true,
+                    priceINR: formData.articleSubmission?.priceINR || 999,
+                    currency: 'INR',
+                    guidelines: e.target.value
+                  }
+                })}
+                className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-slate-50 focus:bg-white"
+                placeholder="Explain what kind of articles you accept and what review standards apply."
+              />
             </div>
           </div>
         </div>

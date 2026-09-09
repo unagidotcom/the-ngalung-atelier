@@ -2,6 +2,9 @@ import {
   Product,
   Article,
   ArticleStatus,
+  ArticleReviewStatus,
+  ArticleSubmissionConfig,
+  ArticleSubmissionEntitlement,
   Order,
   OrderStatus,
   AccessPayload,
@@ -207,6 +210,113 @@ export async function fetchCustomerOrders(): Promise<CustomerOrder[]> {
   }
 
   return data.orders || [];
+}
+
+export async function fetchArticleSubmissionConfig(): Promise<{
+  config: ArticleSubmissionConfig;
+  payment: { configured: boolean; keyId: string };
+}> {
+  const res = await fetch(`${API_BASE}/articles/submission/config`);
+  const data = await res.json();
+  if (!data.success) throw new Error(data.message || 'Failed to load article submission settings');
+  return {
+    config: data.config,
+    payment: data.payment || { configured: false, keyId: '' }
+  };
+}
+
+export async function createArticleSubmissionOrder(): Promise<{
+  success: boolean;
+  entitlementId: string;
+  orderReference: string;
+  amountINR: number;
+  amount: number;
+  currency: 'INR';
+  razorpay: {
+    orderId: string;
+    amount: number;
+    currency: 'INR';
+    keyId: string;
+  };
+}> {
+  const res = await fetch(`${API_BASE}/articles/submission/create-order`, {
+    method: 'POST',
+    headers: getCustomerAuthHeaders()
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.message || data.error || 'Failed to start article submission payment');
+  }
+  return data;
+}
+
+export async function verifyArticleSubmissionPayment(payload: {
+  razorpayOrderId?: string;
+  razorpay_order_id?: string;
+  razorpayPaymentId?: string;
+  razorpay_payment_id?: string;
+  razorpaySignature?: string;
+  razorpay_signature?: string;
+}): Promise<{ success: boolean; entitlement: ArticleSubmissionEntitlement; message: string }> {
+  const res = await fetch(`${API_BASE}/articles/submission/verify`, {
+    method: 'POST',
+    headers: getCustomerAuthHeaders(),
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.message || data.error || 'Failed to verify article submission payment');
+  }
+  return data;
+}
+
+export async function fetchCustomerArticles(): Promise<{
+  articles: Article[];
+  entitlements: ArticleSubmissionEntitlement[];
+  config: ArticleSubmissionConfig;
+}> {
+  const res = await fetch(`${API_BASE}/customer/articles`, {
+    headers: getCustomerAuthHeaders()
+  });
+
+  if (res.status === 401 || res.status === 403) {
+    clearCustomerToken();
+    throw new Error('Please sign in to manage your articles.');
+  }
+
+  const data = await res.json();
+  if (!data.success) throw new Error(data.message || 'Failed to load your articles');
+  return {
+    articles: data.articles || [],
+    entitlements: data.entitlements || [],
+    config: data.config
+  };
+}
+
+export async function saveCustomerArticleDraft(article: Partial<Article>): Promise<Article> {
+  const isEdit = Boolean(article.id);
+  const res = await fetch(isEdit ? `${API_BASE}/customer/articles/${article.id}` : `${API_BASE}/customer/articles`, {
+    method: isEdit ? 'PUT' : 'POST',
+    headers: getCustomerAuthHeaders(),
+    body: JSON.stringify(article)
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.message || data.error || 'Failed to save article draft');
+  }
+  return data.article;
+}
+
+export async function submitCustomerArticle(articleId: string): Promise<{ success: boolean; article: Article; message: string }> {
+  const res = await fetch(`${API_BASE}/customer/articles/${articleId}/submit`, {
+    method: 'POST',
+    headers: getCustomerAuthHeaders()
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.message || data.error || 'Failed to submit article');
+  }
+  return data;
 }
 
 export function getAdminToken(): string | null {
@@ -684,6 +794,45 @@ async function updateArticleStatus(id: string, status: ArticleStatus): Promise<{
 export const publishArticle = (id: string) => updateArticleStatus(id, 'published');
 export const unpublishArticle = (id: string) => updateArticleStatus(id, 'draft');
 export const archiveArticle = (id: string) => updateArticleStatus(id, 'archived');
+
+export async function reviewArticleAdmin(
+  id: string,
+  reviewStatus: ArticleReviewStatus,
+  feedback?: string
+): Promise<{ success: boolean; article?: Article; message?: string }> {
+  const res = await fetch(`${API_BASE}/admin/articles/${id}/review`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ reviewStatus, feedback })
+  });
+
+  if (res.status === 401 || res.status === 403) {
+    throw new Error('Unauthorized: Please log in as administrator');
+  }
+
+  const data = await res.json();
+  if (!data.success) throw new Error(data.message || 'Failed to update article review');
+  return data;
+}
+
+export async function scheduleArticleAdmin(
+  id: string,
+  scheduledAt: string
+): Promise<{ success: boolean; article?: Article; message?: string }> {
+  const res = await fetch(`${API_BASE}/admin/articles/${id}/schedule`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ scheduledAt })
+  });
+
+  if (res.status === 401 || res.status === 403) {
+    throw new Error('Unauthorized: Please log in as administrator');
+  }
+
+  const data = await res.json();
+  if (!data.success) throw new Error(data.message || 'Failed to schedule article');
+  return data;
+}
 
 export async function deleteArticle(id: string): Promise<boolean> {
   const res = await fetch(`${API_BASE}/admin/articles/${id}`, {

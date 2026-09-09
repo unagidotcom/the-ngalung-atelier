@@ -188,6 +188,9 @@ export interface AnalyticsEvent {
 }
 
 export type ArticleStatus = 'draft' | 'published' | 'archived';
+export type ArticleSource = 'admin' | 'customer';
+export type ArticleReviewStatus = 'draft' | 'payment_required' | 'ready_to_submit' | 'submitted' | 'under_review' | 'changes_requested' | 'approved' | 'published' | 'rejected' | 'archived';
+export type ArticleEntitlementStatus = 'pending' | 'active' | 'used' | 'revoked' | 'refunded';
 
 export interface ArticleBookCta {
   enabled: boolean;
@@ -222,11 +225,45 @@ export interface Article {
   socialShareDescription?: string;
   socialShareImage?: string;
   status: ArticleStatus;
+  source?: ArticleSource;
+  ownerCustomerId?: string;
+  ownerCustomerName?: string;
+  ownerCustomerEmail?: string;
+  reviewStatus?: ArticleReviewStatus;
+  reviewFeedback?: string;
+  submittedAt?: string;
+  reviewedAt?: string;
+  scheduledAt?: string;
+  entitlementId?: string;
   publishedAt?: string;
   createdAt: string;
   updatedAt: string;
   bookCta?: ArticleBookCta;
   views?: number;
+}
+
+export interface ArticleSubmissionEntitlement {
+  id: string;
+  customerId: string;
+  customerEmail: string;
+  status: ArticleEntitlementStatus;
+  orderReference?: string;
+  razorpayOrderId?: string;
+  razorpayPaymentId?: string;
+  amountINR: number;
+  currency: 'INR';
+  articleId?: string;
+  createdAt: string;
+  verifiedAt?: string;
+  usedAt?: string;
+  revokedAt?: string;
+}
+
+export interface ArticleSubmissionConfig {
+  enabled: boolean;
+  priceINR: number;
+  currency: 'INR';
+  guidelines: string;
 }
 
 export interface AdminUser {
@@ -429,6 +466,7 @@ export interface StoreSettings {
     discountPercent: number;
     active: boolean;
   }>;
+  articleSubmission?: ArticleSubmissionConfig;
   emailService?: EmailServiceStatus;
   database?: DatabaseDiagnosticStatus;
   storage?: StorageDiagnosticStatus;

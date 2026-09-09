@@ -14,11 +14,12 @@ import {
   Trash2,
   X
 } from 'lucide-react';
-import { Article, ArticleStatus } from '../../types';
+import { Article, ArticleReviewStatus, ArticleStatus } from '../../types';
 import {
   archiveArticle,
   deleteArticle,
   publishArticle,
+  reviewArticleAdmin,
   saveArticle,
   unpublishArticle,
   uploadCoverImage
@@ -78,6 +79,14 @@ function formatDate(value?: string) {
   return new Date(value).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
+function formatDateTimeInput(value?: string) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const offsetMs = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+}
+
 function splitCommaList(value?: string | string[]) {
   if (Array.isArray(value)) return value;
   return (value || '').split(',').map(item => item.trim()).filter(Boolean);
@@ -87,12 +96,27 @@ function statusLabel(article: Article): ArticleStatus {
   return article.status || 'draft';
 }
 
+function reviewStatusLabel(status?: ArticleReviewStatus) {
+  const labels: Record<string, string> = {
+    draft: 'Draft',
+    ready_to_submit: 'Ready',
+    submitted: 'Pending Review',
+    under_review: 'Under Review',
+    changes_requested: 'Changes Requested',
+    approved: 'Approved',
+    published: 'Published',
+    rejected: 'Rejected',
+    archived: 'Archived'
+  };
+  return labels[status || 'draft'] || status || 'Draft';
+}
+
 export const ArticleManagement: React.FC<ArticleManagementProps> = ({
   articles,
   onRefreshArticles,
   onPreviewPublicArticle
 }) => {
-  const [filterStatus, setFilterStatus] = useState<'ALL' | ArticleStatus>('ALL');
+  const [filterStatus, setFilterStatus] = useState<'ALL' | ArticleStatus | 'CUSTOMER_REVIEW' | 'SCHEDULED'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [editingArticle, setEditingArticle] = useState<Partial<Article> | null>(null);
   const [previewArticle, setPreviewArticle] = useState<Partial<Article> | null>(null);
@@ -106,7 +130,10 @@ export const ArticleManagement: React.FC<ArticleManagementProps> = ({
   const filteredArticles = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return articles.filter(article => {
-      const matchesStatus = filterStatus === 'ALL' || statusLabel(article) === filterStatus;
+      const matchesStatus = filterStatus === 'ALL'
+        || statusLabel(article) === filterStatus
+        || (filterStatus === 'CUSTOMER_REVIEW' && article.source === 'customer' && ['submitted', 'under_review', 'changes_requested', 'approved', 'rejected'].includes(article.reviewStatus || 'draft'))
+        || (filterStatus === 'SCHEDULED' && Boolean(article.scheduledAt));
       const matchesSearch = !q ||
         article.title.toLowerCase().includes(q) ||
         article.slug.toLowerCase().includes(q) ||
@@ -202,6 +229,31 @@ export const ArticleManagement: React.FC<ArticleManagementProps> = ({
     }
   };
 
+  const handleReviewAction = async (article: Article, reviewStatus: ArticleReviewStatus) => {
+    const needsFeedback = reviewStatus === 'changes_requested' || reviewStatus === 'rejected';
+    const feedback = needsFeedback
+      ? window.prompt(reviewStatus === 'changes_requested' ? 'What should the customer change?' : 'Why is this article rejected?')
+      : undefined;
+    if (needsFeedback && !feedback?.trim()) return;
+
+    setProcessingId(article.id);
+    try {
+      await reviewArticleAdmin(article.id, reviewStatus, feedback?.trim());
+      showMessage(
+        reviewStatus === 'published'
+          ? 'Article published.'
+          : reviewStatus === 'approved'
+            ? 'Article approved.'
+            : 'Article review updated.'
+      );
+      onRefreshArticles();
+    } catch (err: any) {
+      showError(err.message || 'Failed to update review');
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
   const handleDelete = async (article: Article) => {
     if (!window.confirm(`Delete "${article.title}" permanently?`)) return;
     setProcessingId(article.id);
@@ -261,6 +313,8 @@ export const ArticleManagement: React.FC<ArticleManagementProps> = ({
         <div className="flex gap-1.5 overflow-x-auto">
           {[
             { key: 'ALL', label: `All (${articles.length})` },
+            { key: 'CUSTOMER_REVIEW', label: `Review (${articles.filter(a => a.source === 'customer' && ['submitted', 'under_review', 'changes_requested', 'approved', 'rejected'].includes(a.reviewStatus || 'draft')).length})` },
+            { key: 'SCHEDULED', label: `Scheduled (${articles.filter(a => a.scheduledAt).length})` },
             { key: 'published', label: `Published (${articles.filter(a => a.status === 'published').length})` },
             { key: 'draft', label: `Drafts (${articles.filter(a => a.status === 'draft').length})` },
             { key: 'archived', label: `Archived (${articles.filter(a => a.status === 'archived').length})` }
@@ -292,15 +346,16 @@ export const ArticleManagement: React.FC<ArticleManagementProps> = ({
 
       <div className="overflow-hidden rounded-3xl border border-[#E7DFCE] bg-[#FFFFFF] shadow-2xs">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[860px] text-left text-xs">
+          <table className="w-full min-w-[1020px] text-left text-xs">
             <thead>
               <tr className="border-b border-[#E7DFCE] bg-[#FAF6EE] font-mono text-[11px] font-bold uppercase tracking-wider text-[#6E6C63]">
                 <th className="p-4">Title</th>
+                <th className="p-4">Author</th>
                 <th className="p-4">Category</th>
-                <th className="p-4">Status</th>
+                <th className="p-4">Workflow</th>
                 <th className="p-4">Published</th>
                 <th className="p-4">Updated</th>
-                <th className="p-4">Views</th>
+                <th className="p-4">Words</th>
                 <th className="p-4">SEO</th>
                 <th className="p-4 text-right">Actions</th>
               </tr>
@@ -308,7 +363,7 @@ export const ArticleManagement: React.FC<ArticleManagementProps> = ({
             <tbody className="divide-y divide-[#E7DFCE]">
               {filteredArticles.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="p-8 text-center text-[#6E6C63]">No articles found.</td>
+                  <td colSpan={9} className="p-8 text-center text-[#6E6C63]">No articles found.</td>
                 </tr>
               ) : filteredArticles.map(article => {
                 const seoReady = Boolean(article.seoTitle && article.metaDescription && article.slug && article.featuredImageAlt);
@@ -319,23 +374,33 @@ export const ArticleManagement: React.FC<ArticleManagementProps> = ({
                       <div className="font-mono text-[11px] text-[#A6A296]">/articles/{article.slug}</div>
                     </td>
                     <td className="p-4">
+                      <div className="font-bold text-[#17181F]">{article.source === 'customer' ? article.ownerCustomerName || article.author : article.author}</div>
+                      <div className="font-mono text-[10px] text-[#A6A296]">{article.source === 'customer' ? article.ownerCustomerEmail || 'customer' : 'admin'}</div>
+                    </td>
+                    <td className="p-4">
                       <span className="rounded-full bg-[#F3EDE0] px-2.5 py-0.5 text-[10px] font-bold">{article.category}</span>
                     </td>
                     <td className="p-4">
-                      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
-                        article.status === 'published'
-                          ? 'bg-[#1F8F5F]/15 text-[#1F8F5F]'
-                          : article.status === 'archived'
-                          ? 'bg-slate-100 text-slate-700'
-                          : 'bg-amber-100 text-amber-800'
-                      }`}>
-                        {article.status === 'published' ? <Eye className="h-3 w-3" /> : article.status === 'archived' ? <Archive className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
-                        {article.status}
-                      </span>
+                      <div className="space-y-1">
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                          article.status === 'published'
+                            ? 'bg-[#1F8F5F]/15 text-[#1F8F5F]'
+                            : article.status === 'archived'
+                            ? 'bg-slate-100 text-slate-700'
+                            : 'bg-amber-100 text-amber-800'
+                        }`}>
+                          {article.status === 'published' ? <Eye className="h-3 w-3" /> : article.status === 'archived' ? <Archive className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+                          {article.status}
+                        </span>
+                        <div className="font-mono text-[10px] font-bold text-[#6E6C63]">{reviewStatusLabel(article.reviewStatus)}</div>
+                      </div>
                     </td>
                     <td className="p-4 font-mono text-[11px] text-[#6E6C63]">{formatDate(article.publishedAt)}</td>
-                    <td className="p-4 font-mono text-[11px] text-[#6E6C63]">{formatDate(article.updatedAt)}</td>
-                    <td className="p-4 font-mono font-bold text-[#17181F]">{article.views || 0}</td>
+                    <td className="p-4 font-mono text-[11px] text-[#6E6C63]">
+                      {formatDate(article.updatedAt)}
+                      {article.scheduledAt && <div className="mt-1 text-[10px] font-bold text-[#FF5A36]">Scheduled {formatDate(article.scheduledAt)}</div>}
+                    </td>
+                    <td className="p-4 font-mono font-bold text-[#17181F]">{(article.content || '').trim().split(/\s+/).filter(Boolean).length}</td>
                     <td className="p-4">
                       <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${seoReady ? 'bg-[#1F8F5F]/15 text-[#1F8F5F]' : 'bg-amber-100 text-amber-800'}`}>
                         {seoReady ? 'Ready' : 'Needs Review'}
@@ -348,6 +413,16 @@ export const ArticleManagement: React.FC<ArticleManagementProps> = ({
                           <button type="button" onClick={() => onPreviewPublicArticle(article.slug)} title="Open public article" className="rounded-full p-1.5 text-[#6E6C63] hover:bg-[#F3EDE0]"><ExternalLink className="h-4 w-4" /></button>
                         )}
                         <button type="button" onClick={() => setEditingArticle({ ...article })} title="Edit" className="rounded-full p-1.5 text-[#6E6C63] hover:bg-[#F3EDE0]"><Edit className="h-4 w-4" /></button>
+                        {article.source === 'customer' && article.reviewStatus === 'submitted' && (
+                          <button type="button" disabled={processingId === article.id} onClick={() => handleReviewAction(article, 'under_review')} className="rounded-full px-2.5 py-1 text-[10px] font-bold text-blue-700 hover:bg-blue-50">Review</button>
+                        )}
+                        {article.source === 'customer' && ['submitted', 'under_review', 'changes_requested'].includes(article.reviewStatus || '') && (
+                          <>
+                            <button type="button" disabled={processingId === article.id} onClick={() => handleReviewAction(article, 'approved')} className="rounded-full px-2.5 py-1 text-[10px] font-bold text-[#1F8F5F] hover:bg-[#1F8F5F]/10">Approve</button>
+                            <button type="button" disabled={processingId === article.id} onClick={() => handleReviewAction(article, 'changes_requested')} className="rounded-full px-2.5 py-1 text-[10px] font-bold text-amber-700 hover:bg-amber-50">Changes</button>
+                            <button type="button" disabled={processingId === article.id} onClick={() => handleReviewAction(article, 'rejected')} className="rounded-full px-2.5 py-1 text-[10px] font-bold text-red-600 hover:bg-red-50">Reject</button>
+                          </>
+                        )}
                         {article.status === 'published' ? (
                           <button type="button" disabled={processingId === article.id} onClick={() => handleStatusAction(article, 'draft')} className="rounded-full px-2.5 py-1 text-[10px] font-bold text-stone-600 hover:bg-[#F3EDE0]">Unpublish</button>
                         ) : (
@@ -449,6 +524,26 @@ export const ArticleManagement: React.FC<ArticleManagementProps> = ({
               </div>
 
               <aside className="space-y-5 border-t border-slate-100 bg-slate-50 p-5 text-xs lg:border-l lg:border-t-0">
+                <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4">
+                  <h4 className="font-mono text-[11px] font-bold uppercase tracking-wider text-[#FF5A36]">Publishing Workflow</h4>
+                  {editingArticle.source === 'customer' && (
+                    <div className="rounded-xl bg-[#FAF6EE] p-3 text-[11px] leading-5 text-[#6E6C63]">
+                      <div className="font-bold text-[#17181F]">{editingArticle.ownerCustomerName || 'Customer submission'}</div>
+                      <div className="font-mono">{editingArticle.ownerCustomerEmail}</div>
+                      <div className="mt-1">Review: {reviewStatusLabel(editingArticle.reviewStatus)}</div>
+                    </div>
+                  )}
+                  <div>
+                    <label className="mb-1 block font-bold text-slate-700">Schedule Publish Date</label>
+                    <input
+                      type="datetime-local"
+                      value={formatDateTimeInput(editingArticle.scheduledAt)}
+                      onChange={e => updateEditingArticle({ scheduledAt: e.target.value ? new Date(e.target.value).toISOString() : undefined })}
+                      className="w-full rounded-xl border border-slate-300 px-3.5 py-2"
+                    />
+                  </div>
+                </section>
+
                 <section className="space-y-3">
                   <h4 className="font-mono text-[11px] font-bold uppercase tracking-wider text-[#FF5A36]">SEO Panel</h4>
                   <div>

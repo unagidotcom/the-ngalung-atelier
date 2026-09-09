@@ -6,6 +6,9 @@ import {
   ProductStatus,
   Article,
   ArticleStatus,
+  ArticleSubmissionConfig,
+  ArticleSubmissionEntitlement,
+  ArticleReviewStatus,
   Order,
   OrderStatus,
   AnalyticsEvent,
@@ -16,6 +19,13 @@ import {
 } from '../../src/types';
 import { CustomerRecord } from '../dataStore';
 import { FileStorageService } from '../fileStorage';
+
+const DEFAULT_ARTICLE_SUBMISSION_CONFIG: ArticleSubmissionConfig = {
+  enabled: true,
+  priceINR: 999,
+  currency: 'INR',
+  guidelines: 'Submit original, useful, non-spam articles for editorial review. Publication is not guaranteed and customers cannot publish directly.'
+};
 
 function mapProductRow(row: any): Product {
   return {
@@ -140,11 +150,40 @@ function mapArticleRow(row: any): Article {
     socialShareDescription: row.social_share_description || '',
     socialShareImage: row.social_share_image || '',
     status: row.status || 'draft',
+    source: row.source || 'admin',
+    ownerCustomerId: row.owner_customer_id || undefined,
+    ownerCustomerName: row.owner_customer_name || undefined,
+    ownerCustomerEmail: row.owner_customer_email || undefined,
+    reviewStatus: row.review_status || (row.status === 'published' ? 'published' : 'draft'),
+    reviewFeedback: row.review_feedback || '',
+    submittedAt: row.submitted_at ? new Date(row.submitted_at).toISOString() : undefined,
+    reviewedAt: row.reviewed_at ? new Date(row.reviewed_at).toISOString() : undefined,
+    scheduledAt: row.scheduled_at ? new Date(row.scheduled_at).toISOString() : undefined,
+    entitlementId: row.entitlement_id || undefined,
     publishedAt: row.published_at ? new Date(row.published_at).toISOString() : undefined,
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
     updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString(),
     bookCta: typeof row.book_cta === 'string' ? JSON.parse(row.book_cta || '{}') : row.book_cta || undefined,
     views: Number(row.views || 0)
+  };
+}
+
+function mapArticleEntitlementRow(row: any): ArticleSubmissionEntitlement {
+  return {
+    id: row.id,
+    customerId: row.customer_id,
+    customerEmail: row.customer_email,
+    status: row.status || 'pending',
+    orderReference: row.order_reference || undefined,
+    razorpayOrderId: row.razorpay_order_id || undefined,
+    razorpayPaymentId: row.razorpay_payment_id || undefined,
+    amountINR: Number(row.amount_inr || 0),
+    currency: row.currency || 'INR',
+    articleId: row.article_id || undefined,
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+    verifiedAt: row.verified_at ? new Date(row.verified_at).toISOString() : undefined,
+    usedAt: row.used_at ? new Date(row.used_at).toISOString() : undefined,
+    revokedAt: row.revoked_at ? new Date(row.revoked_at).toISOString() : undefined
   };
 }
 
@@ -425,6 +464,16 @@ export class PostgresStore {
         status,
         tags: articleData.tags || existing.tags || [],
         secondaryKeywords: articleData.secondaryKeywords || existing.secondaryKeywords || [],
+        source: articleData.source || existing.source || 'admin',
+        ownerCustomerId: articleData.ownerCustomerId || existing.ownerCustomerId,
+        ownerCustomerName: articleData.ownerCustomerName || existing.ownerCustomerName,
+        ownerCustomerEmail: articleData.ownerCustomerEmail || existing.ownerCustomerEmail,
+        reviewStatus: articleData.reviewStatus || existing.reviewStatus || (status === 'published' ? 'published' : 'draft'),
+        reviewFeedback: articleData.reviewFeedback !== undefined ? articleData.reviewFeedback : existing.reviewFeedback,
+        submittedAt: articleData.submittedAt || existing.submittedAt,
+        reviewedAt: articleData.reviewedAt || existing.reviewedAt,
+        scheduledAt: articleData.scheduledAt || existing.scheduledAt,
+        entitlementId: articleData.entitlementId || existing.entitlementId,
         publishedAt: publishedAt || undefined,
         updatedAt: now
       } as Article;
@@ -437,8 +486,12 @@ export class PostgresStore {
           meta_description = $13, canonical_url = $14, og_title = $15,
           og_description = $16, og_image = $17, social_share_title = $18,
           social_share_description = $19, social_share_image = $20, status = $21,
-          published_at = $22, book_cta = $23, updated_at = NOW()
-        WHERE id = $24
+          published_at = $22, book_cta = $23, source = $24,
+          owner_customer_id = $25, owner_customer_name = $26, owner_customer_email = $27,
+          review_status = $28, review_feedback = $29, submitted_at = $30,
+          reviewed_at = $31, scheduled_at = $32, entitlement_id = $33,
+          updated_at = NOW()
+        WHERE id = $34
       `, [
         updated.title, updated.slug, updated.excerpt, updated.content, updated.author,
         updated.category, JSON.stringify(updated.tags || []), updated.featuredImage, updated.featuredImageAlt,
@@ -446,7 +499,11 @@ export class PostgresStore {
         updated.metaDescription, updated.canonicalUrl || null, updated.ogTitle,
         updated.ogDescription, updated.ogImage, updated.socialShareTitle || null,
         updated.socialShareDescription || null, updated.socialShareImage || null, updated.status,
-        updated.publishedAt || null, JSON.stringify(updated.bookCta || {}), updated.id
+        updated.publishedAt || null, JSON.stringify(updated.bookCta || {}), updated.source || 'admin',
+        updated.ownerCustomerId || null, updated.ownerCustomerName || null, updated.ownerCustomerEmail || null,
+        updated.reviewStatus || (updated.status === 'published' ? 'published' : 'draft'), updated.reviewFeedback || null,
+        updated.submittedAt || null, updated.reviewedAt || null, updated.scheduledAt || null,
+        updated.entitlementId || null, updated.id
       ]);
       return (await this.getArticleById(updated.id)) || updated;
     }
@@ -474,6 +531,16 @@ export class PostgresStore {
       socialShareDescription: articleData.socialShareDescription || articleData.ogDescription || articleData.metaDescription || articleData.excerpt || '',
       socialShareImage: articleData.socialShareImage || articleData.ogImage || articleData.featuredImage || '',
       status,
+      source: articleData.source || 'admin',
+      ownerCustomerId: articleData.ownerCustomerId,
+      ownerCustomerName: articleData.ownerCustomerName,
+      ownerCustomerEmail: articleData.ownerCustomerEmail,
+      reviewStatus: articleData.reviewStatus || (status === 'published' ? 'published' : 'draft'),
+      reviewFeedback: articleData.reviewFeedback || '',
+      submittedAt: articleData.submittedAt,
+      reviewedAt: articleData.reviewedAt,
+      scheduledAt: articleData.scheduledAt,
+      entitlementId: articleData.entitlementId,
       publishedAt: publishedAt || undefined,
       createdAt: now,
       updatedAt: now,
@@ -486,13 +553,17 @@ export class PostgresStore {
         featured_image, featured_image_alt, primary_keyword, secondary_keywords,
         seo_title, meta_description, canonical_url, og_title, og_description,
         og_image, social_share_title, social_share_description, social_share_image,
-        status, published_at, book_cta, created_at, updated_at
+        status, published_at, book_cta, source, owner_customer_id, owner_customer_name,
+        owner_customer_email, review_status, review_feedback, submitted_at, reviewed_at,
+        scheduled_at, entitlement_id, created_at, updated_at
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8,
         $9, $10, $11, $12,
         $13, $14, $15, $16, $17,
         $18, $19, $20, $21,
-        $22, $23, $24, NOW(), NOW()
+        $22, $23, $24, $25, $26, $27,
+        $28, $29, $30, $31, $32,
+        $33, $34, NOW(), NOW()
       )
     `, [
       article.id, article.title, article.slug, article.excerpt, article.content, article.author, article.category,
@@ -500,7 +571,11 @@ export class PostgresStore {
       JSON.stringify(article.secondaryKeywords || []), article.seoTitle, article.metaDescription, article.canonicalUrl || null,
       article.ogTitle, article.ogDescription, article.ogImage, article.socialShareTitle || null,
       article.socialShareDescription || null, article.socialShareImage || null, article.status,
-      article.publishedAt || null, JSON.stringify(article.bookCta || {})
+      article.publishedAt || null, JSON.stringify(article.bookCta || {}), article.source || 'admin',
+      article.ownerCustomerId || null, article.ownerCustomerName || null, article.ownerCustomerEmail || null,
+      article.reviewStatus || (article.status === 'published' ? 'published' : 'draft'), article.reviewFeedback || null,
+      article.submittedAt || null, article.reviewedAt || null, article.scheduledAt || null,
+      article.entitlementId || null
     ]);
 
     return article;
@@ -509,21 +584,21 @@ export class PostgresStore {
   async publishArticle(idOrSlug: string): Promise<{ success: boolean; article?: Article; message?: string }> {
     const article = await this.getArticleById(idOrSlug) || await this.getArticleBySlug(idOrSlug, true);
     if (!article) return { success: false, message: 'Article not found' };
-    await query(`UPDATE articles SET status = 'published', published_at = COALESCE(published_at, NOW()), updated_at = NOW() WHERE id = $1`, [article.id]);
+    await query(`UPDATE articles SET status = 'published', review_status = 'published', published_at = COALESCE(published_at, NOW()), updated_at = NOW() WHERE id = $1`, [article.id]);
     return { success: true, article: await this.getArticleById(article.id), message: 'Article published' };
   }
 
   async unpublishArticle(idOrSlug: string): Promise<{ success: boolean; article?: Article; message?: string }> {
     const article = await this.getArticleById(idOrSlug) || await this.getArticleBySlug(idOrSlug, true);
     if (!article) return { success: false, message: 'Article not found' };
-    await query(`UPDATE articles SET status = 'draft', updated_at = NOW() WHERE id = $1`, [article.id]);
+    await query(`UPDATE articles SET status = 'draft', review_status = CASE WHEN source = 'customer' THEN COALESCE(NULLIF(review_status, 'published'), 'approved') ELSE 'draft' END, updated_at = NOW() WHERE id = $1`, [article.id]);
     return { success: true, article: await this.getArticleById(article.id), message: 'Article moved to draft' };
   }
 
   async archiveArticle(idOrSlug: string): Promise<{ success: boolean; article?: Article; message?: string }> {
     const article = await this.getArticleById(idOrSlug) || await this.getArticleBySlug(idOrSlug, true);
     if (!article) return { success: false, message: 'Article not found' };
-    await query(`UPDATE articles SET status = 'archived', updated_at = NOW() WHERE id = $1`, [article.id]);
+    await query(`UPDATE articles SET status = 'archived', review_status = 'archived', updated_at = NOW() WHERE id = $1`, [article.id]);
     return { success: true, article: await this.getArticleById(article.id), message: 'Article archived' };
   }
 
@@ -532,6 +607,201 @@ export class PostgresStore {
     if (!article) return { success: false, message: 'Article not found' };
     await query(`DELETE FROM articles WHERE id = $1`, [article.id]);
     return { success: true, message: 'Article deleted' };
+  }
+
+  async getArticleSubmissionConfig(): Promise<ArticleSubmissionConfig> {
+    const settings = await this.getSettings();
+    return settings.articleSubmission || DEFAULT_ARTICLE_SUBMISSION_CONFIG;
+  }
+
+  async createPendingArticleEntitlement(params: {
+    customerId: string;
+    customerEmail: string;
+    amountINR: number;
+    razorpayOrderId: string;
+    orderReference: string;
+  }): Promise<ArticleSubmissionEntitlement> {
+    const existing = await query(
+      'SELECT * FROM article_submission_entitlements WHERE razorpay_order_id = $1 LIMIT 1',
+      [params.razorpayOrderId]
+    );
+    if (existing.rows.length > 0) return mapArticleEntitlementRow(existing.rows[0]);
+
+    const id = 'art_credit_' + crypto.randomBytes(8).toString('hex');
+    const res = await query(`
+      INSERT INTO article_submission_entitlements (
+        id, customer_id, customer_email, status, order_reference,
+        razorpay_order_id, amount_inr, currency, created_at
+      ) VALUES ($1, $2, $3, 'pending', $4, $5, $6, 'INR', NOW())
+      RETURNING *
+    `, [id, params.customerId, params.customerEmail, params.orderReference, params.razorpayOrderId, params.amountINR]);
+    return mapArticleEntitlementRow(res.rows[0]);
+  }
+
+  async verifyArticleEntitlement(params: {
+    customerId: string;
+    razorpayOrderId: string;
+    razorpayPaymentId: string;
+  }): Promise<ArticleSubmissionEntitlement | undefined> {
+    return withTransaction(async (client: PoolClient) => {
+      const found = await client.query(
+        'SELECT * FROM article_submission_entitlements WHERE customer_id = $1 AND razorpay_order_id = $2 FOR UPDATE',
+        [params.customerId, params.razorpayOrderId]
+      );
+      if (found.rows.length === 0) return undefined;
+      const entitlement = mapArticleEntitlementRow(found.rows[0]);
+      if (entitlement.status === 'active' || entitlement.status === 'used') {
+        return entitlement;
+      }
+      const updated = await client.query(`
+        UPDATE article_submission_entitlements
+        SET status = 'active', razorpay_payment_id = $1, verified_at = COALESCE(verified_at, NOW())
+        WHERE id = $2
+        RETURNING *
+      `, [params.razorpayPaymentId, entitlement.id]);
+      return mapArticleEntitlementRow(updated.rows[0]);
+    });
+  }
+
+  async getArticleEntitlementsByCustomer(customerId: string): Promise<ArticleSubmissionEntitlement[]> {
+    const res = await query(
+      'SELECT * FROM article_submission_entitlements WHERE customer_id = $1 ORDER BY created_at DESC',
+      [customerId]
+    );
+    return res.rows.map(mapArticleEntitlementRow);
+  }
+
+  async getUnusedArticleEntitlement(customerId: string): Promise<ArticleSubmissionEntitlement | undefined> {
+    const res = await query(
+      "SELECT * FROM article_submission_entitlements WHERE customer_id = $1 AND status = 'active' ORDER BY created_at ASC LIMIT 1",
+      [customerId]
+    );
+    if (res.rows.length === 0) return undefined;
+    return mapArticleEntitlementRow(res.rows[0]);
+  }
+
+  async getCustomerArticles(customerId: string): Promise<Article[]> {
+    const res = await query(
+      'SELECT * FROM articles WHERE owner_customer_id = $1 ORDER BY COALESCE(updated_at, created_at) DESC',
+      [customerId]
+    );
+    return res.rows.map(mapArticleRow);
+  }
+
+  async getCustomerArticleById(customerId: string, articleId: string): Promise<Article | undefined> {
+    const res = await query(
+      'SELECT * FROM articles WHERE id = $1 AND owner_customer_id = $2 LIMIT 1',
+      [articleId, customerId]
+    );
+    if (res.rows.length === 0) return undefined;
+    return mapArticleRow(res.rows[0]);
+  }
+
+  async saveCustomerArticle(customer: { id: string; name: string; email: string }, articleData: Partial<Article>): Promise<Article> {
+    const existing = articleData.id ? await this.getCustomerArticleById(customer.id, articleData.id) : undefined;
+    if (!existing) {
+      const entitlement = await this.getUnusedArticleEntitlement(customer.id);
+      if (!entitlement) {
+        throw new Error('A verified article submission credit is required before creating a customer article.');
+      }
+      return this.saveArticle({
+        ...articleData,
+        source: 'customer',
+        ownerCustomerId: customer.id,
+        ownerCustomerName: customer.name,
+        ownerCustomerEmail: customer.email,
+        author: articleData.author || customer.name,
+        status: 'draft',
+        reviewStatus: 'ready_to_submit',
+        entitlementId: entitlement.id
+      });
+    }
+
+    const lockedStatuses: ArticleReviewStatus[] = ['submitted', 'under_review', 'approved', 'published'];
+    if (lockedStatuses.includes(existing.reviewStatus || 'draft')) {
+      throw new Error('This article is under review or already approved. Wait for admin feedback before editing.');
+    }
+
+    return this.saveArticle({
+      ...existing,
+      ...articleData,
+      id: existing.id,
+      source: 'customer',
+      ownerCustomerId: customer.id,
+      ownerCustomerName: customer.name,
+      ownerCustomerEmail: customer.email,
+      status: 'draft',
+      reviewStatus: existing.reviewStatus === 'changes_requested' ? 'changes_requested' : 'ready_to_submit',
+      entitlementId: existing.entitlementId
+    });
+  }
+
+  async submitCustomerArticle(customerId: string, articleId: string): Promise<{ success: boolean; article?: Article; message?: string }> {
+    return withTransaction(async (client: PoolClient) => {
+      const articleRes = await client.query(
+        'SELECT * FROM articles WHERE id = $1 AND owner_customer_id = $2 FOR UPDATE',
+        [articleId, customerId]
+      );
+      if (articleRes.rows.length === 0) return { success: false, message: 'Article not found' };
+      const article = mapArticleRow(articleRes.rows[0]);
+      if (!article.entitlementId) return { success: false, message: 'A verified article submission credit is required.' };
+
+      const entitlementRes = await client.query(
+        'SELECT * FROM article_submission_entitlements WHERE id = $1 AND customer_id = $2 FOR UPDATE',
+        [article.entitlementId, customerId]
+      );
+      if (entitlementRes.rows.length === 0) {
+        return { success: false, message: 'A verified unused article submission credit is required.' };
+      }
+      const entitlement = mapArticleEntitlementRow(entitlementRes.rows[0]);
+      if (entitlement.status !== 'active' && entitlement.status !== 'used') {
+        return { success: false, message: 'A verified unused article submission credit is required.' };
+      }
+
+      if (entitlement.status === 'active') {
+        await client.query(`
+          UPDATE article_submission_entitlements
+          SET status = 'used', article_id = $1, used_at = COALESCE(used_at, NOW())
+          WHERE id = $2
+        `, [article.id, entitlement.id]);
+      }
+
+      const updated = await client.query(`
+        UPDATE articles
+        SET review_status = 'submitted', submitted_at = COALESCE(submitted_at, NOW()), updated_at = NOW()
+        WHERE id = $1
+        RETURNING *
+      `, [article.id]);
+      return {
+        success: true,
+        article: mapArticleRow(updated.rows[0]),
+        message: 'Article submitted for admin review.'
+      };
+    });
+  }
+
+  async updateArticleReview(idOrSlug: string, reviewStatus: ArticleReviewStatus, feedback?: string): Promise<{ success: boolean; article?: Article; message?: string }> {
+    const article = await this.getArticleById(idOrSlug) || await this.getArticleBySlug(idOrSlug, true);
+    if (!article) return { success: false, message: 'Article not found' };
+
+    const nextStatus: ArticleStatus = reviewStatus === 'published'
+      ? 'published'
+      : reviewStatus === 'archived'
+        ? 'archived'
+        : article.status;
+    const res = await query(`
+      UPDATE articles
+      SET review_status = $1,
+          review_feedback = $2,
+          reviewed_at = NOW(),
+          status = $3,
+          published_at = CASE WHEN $1 = 'published' THEN COALESCE(published_at, NOW()) ELSE published_at END,
+          updated_at = NOW()
+      WHERE id = $4
+      RETURNING *
+    `, [reviewStatus, feedback !== undefined ? feedback : article.reviewFeedback || null, nextStatus, article.id]);
+
+    return { success: true, article: mapArticleRow(res.rows[0]), message: 'Article review updated.' };
   }
 
   async getRelatedArticles(article: Article, limit = 3): Promise<Article[]> {
@@ -1031,7 +1301,8 @@ export class PostgresStore {
         razorpayKeyId: '',
         razorpayKeySecret: '',
         socialLinks: {},
-        discountCodes: []
+        discountCodes: [],
+        articleSubmission: DEFAULT_ARTICLE_SUBMISSION_CONFIG
       };
     }
     const row = res.rows[0];
@@ -1055,7 +1326,10 @@ export class PostgresStore {
       razorpayKeyId: row.razorpay_key_id,
       razorpayKeySecret: row.razorpay_key_secret,
       socialLinks: typeof row.social_links === 'string' ? JSON.parse(row.social_links) : row.social_links || {},
-      discountCodes: typeof row.discount_codes === 'string' ? JSON.parse(row.discount_codes) : row.discount_codes || []
+      discountCodes: typeof row.discount_codes === 'string' ? JSON.parse(row.discount_codes) : row.discount_codes || [],
+      articleSubmission: typeof row.article_submission === 'string'
+        ? JSON.parse(row.article_submission)
+        : row.article_submission || DEFAULT_ARTICLE_SUBMISSION_CONFIG
     };
   }
 
@@ -1068,12 +1342,12 @@ export class PostgresStore {
         id, store_name, store_tagline, creator_name, creator_bio, creator_avatar,
         support_email, business_name, country, refund_policy_summary, refund_policy_text,
         terms_custom_text, privacy_custom_text, upi_id, merchant_name, currency,
-        test_mode, razorpay_key_id, razorpay_key_secret, social_links, discount_codes, updated_at
+        test_mode, razorpay_key_id, razorpay_key_secret, social_links, discount_codes, article_submission, updated_at
       ) VALUES (
         'default', $1, $2, $3, $4, $5,
         $6, $7, $8, $9, $10,
         $11, $12, $13, $14, $15,
-        $16, $17, $18, $19, $20, NOW()
+        $16, $17, $18, $19, $20, $21, NOW()
       )
       ON CONFLICT (id) DO UPDATE SET
         store_name = EXCLUDED.store_name,
@@ -1096,13 +1370,15 @@ export class PostgresStore {
         razorpay_key_secret = EXCLUDED.razorpay_key_secret,
         social_links = EXCLUDED.social_links,
         discount_codes = EXCLUDED.discount_codes,
+        article_submission = EXCLUDED.article_submission,
         updated_at = NOW();
     `, [
       updated.storeName, updated.storeTagline, updated.creatorName, updated.creatorBio, updated.creatorAvatar,
       updated.supportEmail, updated.businessName, updated.country, updated.refundPolicySummary, updated.refundPolicyText,
       updated.termsCustomText, updated.privacyCustomText, updated.upiId, updated.merchantName, updated.currency,
       updated.testMode, updated.razorpayKeyId, updated.razorpayKeySecret,
-      JSON.stringify(updated.socialLinks || {}), JSON.stringify(updated.discountCodes || [])
+      JSON.stringify(updated.socialLinks || {}), JSON.stringify(updated.discountCodes || []),
+      JSON.stringify(updated.articleSubmission || DEFAULT_ARTICLE_SUBMISSION_CONFIG)
     ]);
 
     return updated;

@@ -18,7 +18,9 @@ import {
   AlertCircle,
   Menu,
   Sparkles,
-  Store
+  Store,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import {
   Product,
@@ -59,6 +61,8 @@ import { OrdersManagement } from './admin/OrdersManagement';
 import { CustomersManagement } from './admin/CustomersManagement';
 import { AnalyticsOverview } from './admin/AnalyticsOverview';
 import { SettingsSection } from './admin/SettingsSection';
+import { ThreeDotMenu } from './ui/ThreeDotMenu';
+import { LogoutConfirmationModal } from './ui/LogoutConfirmationModal';
 
 interface AdminDashboardProps {
   onNavigateHome: () => void;
@@ -93,6 +97,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [loading, setLoading] = useState(false);
   const [actionMessage, setActionMessage] = useState('');
   const [actionError, setActionError] = useState('');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [confirmLogout, setConfirmLogout] = useState(false);
 
   // Product Add / Edit Modal State
   const [editingProduct, setEditingProduct] = useState<Partial<Product> | null>(null);
@@ -394,14 +400,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <span className="hidden md:inline">Refresh Data</span>
             </button>
 
-            <button
-              id="admin-logout-btn"
-              onClick={handleLogout}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-red-100 bg-red-600 hover:bg-red-700 rounded-xl transition-colors shadow-xs"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              <span>Logout</span>
-            </button>
+            <ThreeDotMenu
+              buttonClassName="border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white"
+              menuClassName="border-slate-200"
+              items={[
+                {
+                  label: 'Refresh Data',
+                  icon: <RefreshCw className="h-4 w-4" />,
+                  onClick: loadAllData
+                },
+                {
+                  label: 'View Storefront',
+                  icon: <Store className="h-4 w-4" />,
+                  onClick: onNavigateHome
+                },
+                {
+                  label: 'Logout',
+                  icon: <LogOut className="h-4 w-4" />,
+                  onClick: () => setConfirmLogout(true),
+                  danger: true
+                }
+              ]}
+            />
           </div>
         </div>
       </header>
@@ -409,10 +429,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* Main Workspace Layout */}
       <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col md:flex-row gap-6">
         {/* Navigation Sidebar */}
-        <aside className="w-full md:w-60 shrink-0">
+        <aside className={`w-full shrink-0 transition-all ${sidebarCollapsed ? 'md:w-18' : 'md:w-60'}`}>
           <div className="bg-white rounded-2xl border border-slate-200/80 p-2.5 shadow-sm sticky top-24 space-y-1">
-            <div className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              Store Management
+            <div className="flex items-center justify-between px-2 py-2">
+              {!sidebarCollapsed && (
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Store Management
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => setSidebarCollapsed(value => !value)}
+                className="hidden h-8 w-8 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100 hover:text-slate-900 md:flex"
+                title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              >
+                {sidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+              </button>
             </div>
 
             <button
@@ -425,7 +457,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               }`}
             >
               <LayoutDashboard className="w-4 h-4" />
-              <span>Dashboard</span>
+              {!sidebarCollapsed && <span>Dashboard</span>}
             </button>
 
             <button
@@ -439,15 +471,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             >
               <div className="flex items-center gap-3">
                 <Package className="w-4 h-4" />
-                <span>Products</span>
+                {!sidebarCollapsed && <span>Products</span>}
               </div>
-              <span
+              {!sidebarCollapsed && <span
                 className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
                   activeTab === 'products' ? 'bg-slate-800 text-slate-200' : 'bg-slate-100 text-slate-600'
                 }`}
               >
                 {products.length}
-              </span>
+              </span>}
             </button>
 
             <button
@@ -461,15 +493,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             >
               <div className="flex items-center gap-3">
                 <BookOpen className="w-4 h-4" />
-                <span>Articles</span>
+                {!sidebarCollapsed && <span>Articles</span>}
               </div>
-              <span
+              {!sidebarCollapsed && <span
                 className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
                   activeTab === 'articles' ? 'bg-slate-800 text-slate-200' : 'bg-slate-100 text-slate-600'
                 }`}
               >
                 {articles.length}
-              </span>
+              </span>}
             </button>
 
             <button
@@ -483,15 +515,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             >
               <div className="flex items-center gap-3">
                 <ShoppingCart className="w-4 h-4" />
-                <span>Orders</span>
+                {!sidebarCollapsed && <span>Orders</span>}
               </div>
-              <span
+              {!sidebarCollapsed && <span
                 className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
                   activeTab === 'orders' ? 'bg-slate-800 text-slate-200' : 'bg-slate-100 text-slate-600'
                 }`}
               >
                 {orders.length}
-              </span>
+              </span>}
             </button>
 
             <button
@@ -505,20 +537,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             >
               <div className="flex items-center gap-3">
                 <Users className="w-4 h-4" />
-                <span>Customers</span>
+                {!sidebarCollapsed && <span>Customers</span>}
               </div>
-              <span
+              {!sidebarCollapsed && <span
                 className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
                   activeTab === 'customers' ? 'bg-slate-800 text-slate-200' : 'bg-slate-100 text-slate-600'
                 }`}
               >
                 {customers.length}
-              </span>
+              </span>}
             </button>
 
-            <div className="pt-2 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-t border-slate-100">
+            {!sidebarCollapsed && <div className="pt-2 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-t border-slate-100">
               Analytics & Settings
-            </div>
+            </div>}
 
             <button
               id="admin-nav-analytics"
@@ -530,7 +562,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               }`}
             >
               <BarChart3 className="w-4 h-4" />
-              <span>Analytics</span>
+              {!sidebarCollapsed && <span>Analytics</span>}
             </button>
 
             <button
@@ -543,7 +575,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               }`}
             >
               <Settings className="w-4 h-4" />
-              <span>Settings</span>
+              {!sidebarCollapsed && <span>Settings</span>}
+            </button>
+
+            <button
+              id="admin-sidebar-logout-btn"
+              onClick={() => setConfirmLogout(true)}
+              className={`mt-3 w-full flex items-center gap-3 border-t border-slate-100 px-3 py-2.5 text-xs font-bold text-red-600 transition hover:bg-red-50 ${sidebarCollapsed ? 'justify-center rounded-xl' : 'rounded-xl'}`}
+              title="Logout"
+            >
+              <LogOut className="w-4 h-4" />
+              {!sidebarCollapsed && <span>Logout</span>}
             </button>
           </div>
         </aside>
@@ -844,6 +886,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {confirmLogout && (
+        <LogoutConfirmationModal
+          title="Logout from admin?"
+          message="Your administrator session will be closed on this browser."
+          onCancel={() => setConfirmLogout(false)}
+          onConfirm={() => {
+            setConfirmLogout(false);
+            handleLogout();
+          }}
+        />
       )}
     </div>
   );

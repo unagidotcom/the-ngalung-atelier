@@ -6,6 +6,8 @@ import {
   ProductStatus,
   Article,
   ArticleStatus,
+  ArticleSubmissionEntitlement,
+  ArticleReviewStatus,
   Order,
   OrderStatus,
   AnalyticsEvent,
@@ -44,6 +46,7 @@ export interface DatabaseSchema {
   settings: StoreSettings;
   customers?: CustomerRecord[];
   webhookEvents?: WebhookEventRecord[];
+  articleSubmissionEntitlements?: ArticleSubmissionEntitlement[];
 }
 
 const INITIAL_PRODUCTS: Product[] = [];
@@ -66,7 +69,13 @@ const INITIAL_SETTINGS: StoreSettings = {
   razorpayKeyId: '',
   razorpayKeySecret: '',
   socialLinks: {},
-  discountCodes: []
+  discountCodes: [],
+  articleSubmission: {
+    enabled: true,
+    priceINR: 999,
+    currency: 'INR',
+    guidelines: 'Submit original, useful, non-spam articles for editorial review. Publication is not guaranteed and customers cannot publish directly.'
+  }
 };
 
 function generateInitialOrdersAndEvents(_products: Product[]) {
@@ -109,6 +118,12 @@ class DataStore {
           if (!parsed.articles) {
             parsed.articles = [];
           }
+          if (!parsed.articleSubmissionEntitlements) {
+            parsed.articleSubmissionEntitlements = [];
+          }
+          if (!parsed.settings.articleSubmission) {
+            parsed.settings.articleSubmission = INITIAL_SETTINGS.articleSubmission;
+          }
           return parsed;
         }
       }
@@ -124,7 +139,8 @@ class DataStore {
       events: events,
       settings: INITIAL_SETTINGS,
       customers: [],
-      webhookEvents: []
+      webhookEvents: [],
+      articleSubmissionEntitlements: []
     };
 
     this.saveData(initialDb);
@@ -384,6 +400,8 @@ class DataStore {
           tags,
           secondaryKeywords,
           status,
+          source: articleData.source || existing.source || 'admin',
+          reviewStatus: articleData.reviewStatus || existing.reviewStatus || (status === 'published' ? 'published' : 'draft'),
           publishedAt: shouldSetPublishedAt ? now : (status === 'published' ? articleData.publishedAt || existing.publishedAt : articleData.publishedAt),
           updatedAt: now
         } as Article;
@@ -419,7 +437,17 @@ class DataStore {
       publishedAt: status === 'published' ? (articleData.publishedAt || now) : undefined,
       createdAt: now,
       updatedAt: now,
-      bookCta: articleData.bookCta
+      bookCta: articleData.bookCta,
+      source: articleData.source || 'admin',
+      ownerCustomerId: articleData.ownerCustomerId,
+      ownerCustomerName: articleData.ownerCustomerName,
+      ownerCustomerEmail: articleData.ownerCustomerEmail,
+      reviewStatus: articleData.reviewStatus || (status === 'published' ? 'published' : 'draft'),
+      reviewFeedback: articleData.reviewFeedback || '',
+      submittedAt: articleData.submittedAt,
+      reviewedAt: articleData.reviewedAt,
+      scheduledAt: articleData.scheduledAt,
+      entitlementId: articleData.entitlementId
     };
 
     this.data.articles.unshift(article);
@@ -431,6 +459,7 @@ class DataStore {
     const article = (this.data.articles || []).find(a => a.id === idOrSlug || a.slug === idOrSlug);
     if (!article) return { success: false, message: 'Article not found' };
     article.status = 'published';
+    article.reviewStatus = 'published';
     article.publishedAt = article.publishedAt || new Date().toISOString();
     article.updatedAt = new Date().toISOString();
     this.saveData(this.data);
@@ -441,6 +470,7 @@ class DataStore {
     const article = (this.data.articles || []).find(a => a.id === idOrSlug || a.slug === idOrSlug);
     if (!article) return { success: false, message: 'Article not found' };
     article.status = 'draft';
+    article.reviewStatus = article.source === 'customer' && article.reviewStatus === 'published' ? 'approved' : (article.reviewStatus || 'draft');
     article.updatedAt = new Date().toISOString();
     this.saveData(this.data);
     return { success: true, article, message: 'Article moved to draft' };
@@ -450,6 +480,7 @@ class DataStore {
     const article = (this.data.articles || []).find(a => a.id === idOrSlug || a.slug === idOrSlug);
     if (!article) return { success: false, message: 'Article not found' };
     article.status = 'archived';
+    article.reviewStatus = 'archived';
     article.updatedAt = new Date().toISOString();
     this.saveData(this.data);
     return { success: true, article, message: 'Article archived' };
@@ -463,6 +494,150 @@ class DataStore {
     }
     this.saveData(this.data);
     return { success: true, message: 'Article deleted' };
+  }
+
+  getArticleSubmissionConfig() {
+    return this.data.settings.articleSubmission || INITIAL_SETTINGS.articleSubmission!;
+  }
+
+  createPendingArticleEntitlement(params: {
+    customerId: string;
+    customerEmail: string;
+    amountINR: number;
+    razorpayOrderId: string;
+    orderReference: string;
+  }): ArticleSubmissionEntitlement {
+    if (!this.data.articleSubmissionEntitlements) this.data.articleSubmissionEntitlements = [];
+    const existing = this.data.articleSubmissionEntitlements.find(e => e.razorpayOrderId === params.razorpayOrderId);
+    if (existing) return existing;
+    const entitlement: ArticleSubmissionEntitlement = {
+      id: 'art_credit_' + crypto.randomBytes(8).toString('hex'),
+      customerId: params.customerId,
+      customerEmail: params.customerEmail,
+      status: 'pending',
+      orderReference: params.orderReference,
+      razorpayOrderId: params.razorpayOrderId,
+      amountINR: params.amountINR,
+      currency: 'INR',
+      createdAt: new Date().toISOString()
+    };
+    this.data.articleSubmissionEntitlements.unshift(entitlement);
+    this.saveData(this.data);
+    return entitlement;
+  }
+
+  verifyArticleEntitlement(params: {
+    customerId: string;
+    razorpayOrderId: string;
+    razorpayPaymentId: string;
+  }): ArticleSubmissionEntitlement | undefined {
+    const entitlement = (this.data.articleSubmissionEntitlements || []).find(e =>
+      e.customerId === params.customerId && e.razorpayOrderId === params.razorpayOrderId
+    );
+    if (!entitlement) return undefined;
+    if (entitlement.status === 'used' || entitlement.status === 'active') return entitlement;
+    entitlement.status = 'active';
+    entitlement.razorpayPaymentId = params.razorpayPaymentId;
+    entitlement.verifiedAt = new Date().toISOString();
+    this.saveData(this.data);
+    return entitlement;
+  }
+
+  getArticleEntitlementsByCustomer(customerId: string): ArticleSubmissionEntitlement[] {
+    return [...(this.data.articleSubmissionEntitlements || [])]
+      .filter(e => e.customerId === customerId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+
+  getUnusedArticleEntitlement(customerId: string): ArticleSubmissionEntitlement | undefined {
+    return (this.data.articleSubmissionEntitlements || []).find(e => e.customerId === customerId && e.status === 'active');
+  }
+
+  getCustomerArticles(customerId: string): Article[] {
+    return [...(this.data.articles || [])]
+      .filter(a => a.ownerCustomerId === customerId)
+      .sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
+  }
+
+  getCustomerArticleById(customerId: string, articleId: string): Article | undefined {
+    return (this.data.articles || []).find(a => a.id === articleId && a.ownerCustomerId === customerId);
+  }
+
+  saveCustomerArticle(customer: { id: string; name: string; email: string }, articleData: Partial<Article>): Article {
+    const existing = articleData.id ? this.getCustomerArticleById(customer.id, articleData.id) : undefined;
+    if (!existing) {
+      const entitlement = this.getUnusedArticleEntitlement(customer.id);
+      if (!entitlement) {
+        throw new Error('A verified article submission credit is required before creating a customer article.');
+      }
+      return this.saveArticle({
+        ...articleData,
+        source: 'customer',
+        ownerCustomerId: customer.id,
+        ownerCustomerName: customer.name,
+        ownerCustomerEmail: customer.email,
+        author: articleData.author || customer.name,
+        status: 'draft',
+        reviewStatus: 'ready_to_submit',
+        entitlementId: entitlement.id
+      });
+    }
+
+    const lockedStatuses: ArticleReviewStatus[] = ['submitted', 'under_review', 'approved', 'published'];
+    if (lockedStatuses.includes(existing.reviewStatus || 'draft')) {
+      throw new Error('This article is under review or already approved. Wait for admin feedback before editing.');
+    }
+
+    return this.saveArticle({
+      ...existing,
+      ...articleData,
+      id: existing.id,
+      source: 'customer',
+      ownerCustomerId: customer.id,
+      ownerCustomerName: customer.name,
+      ownerCustomerEmail: customer.email,
+      status: 'draft',
+      reviewStatus: existing.reviewStatus === 'changes_requested' ? 'changes_requested' : 'ready_to_submit',
+      entitlementId: existing.entitlementId
+    });
+  }
+
+  submitCustomerArticle(customerId: string, articleId: string): { success: boolean; article?: Article; message?: string } {
+    const article = this.getCustomerArticleById(customerId, articleId);
+    if (!article) return { success: false, message: 'Article not found' };
+    if (!article.entitlementId) return { success: false, message: 'A verified article submission credit is required.' };
+    const entitlement = (this.data.articleSubmissionEntitlements || []).find(e => e.id === article.entitlementId && e.customerId === customerId);
+    if (!entitlement || (entitlement.status !== 'active' && entitlement.status !== 'used')) {
+      return { success: false, message: 'A verified unused article submission credit is required.' };
+    }
+    if (entitlement.status === 'active') {
+      entitlement.status = 'used';
+      entitlement.articleId = article.id;
+      entitlement.usedAt = new Date().toISOString();
+    }
+    article.reviewStatus = 'submitted';
+    article.submittedAt = new Date().toISOString();
+    article.updatedAt = new Date().toISOString();
+    this.saveData(this.data);
+    return { success: true, article, message: 'Article submitted for admin review.' };
+  }
+
+  updateArticleReview(idOrSlug: string, reviewStatus: ArticleReviewStatus, feedback?: string): { success: boolean; article?: Article; message?: string } {
+    const article = (this.data.articles || []).find(a => a.id === idOrSlug || a.slug === idOrSlug);
+    if (!article) return { success: false, message: 'Article not found' };
+    article.reviewStatus = reviewStatus;
+    article.reviewFeedback = feedback !== undefined ? feedback : article.reviewFeedback;
+    article.reviewedAt = new Date().toISOString();
+    article.updatedAt = new Date().toISOString();
+    if (reviewStatus === 'published') {
+      article.status = 'published';
+      article.publishedAt = article.publishedAt || new Date().toISOString();
+    }
+    if (reviewStatus === 'archived') {
+      article.status = 'archived';
+    }
+    this.saveData(this.data);
+    return { success: true, article, message: 'Article review updated.' };
   }
 
   getRelatedArticles(article: Article, limit = 3): Article[] {

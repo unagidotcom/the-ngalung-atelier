@@ -6,6 +6,7 @@ import { StorefrontHome } from './components/StorefrontHome';
 import { ProductLandingPage } from './components/ProductLandingPage';
 import { ArticleLibraryPage } from './components/ArticleLibraryPage';
 import { ArticlePage } from './components/ArticlePage';
+import { CustomerArticlesPage } from './components/CustomerArticlesPage';
 import { CheckoutModal } from './components/CheckoutModal';
 import { DeliveryVault } from './components/DeliveryVault';
 import { MyPurchases } from './components/MyPurchases';
@@ -146,6 +147,10 @@ export default function App() {
     let newPath = '/';
     if (view === 'articles') {
       newPath = '/articles';
+    } else if (view === 'write-article') {
+      newPath = '/articles/write';
+    } else if (view === 'my-articles') {
+      newPath = '/account/articles';
     } else if (view === 'article' && slug) {
       newPath = `/articles/${slug}`;
     } else if (view === 'product' && slug) {
@@ -189,6 +194,10 @@ export default function App() {
     activeSlug = currentPath.replace('/p/', '').split('?')[0];
   } else if (currentPath === '/articles') {
     activeView = 'articles';
+  } else if (currentPath === '/articles/write') {
+    activeView = 'write-article';
+  } else if (currentPath === '/account/articles') {
+    activeView = 'my-articles';
   } else if (currentPath.startsWith('/articles/')) {
     activeView = 'article';
     activeSlug = currentPath.replace('/articles/', '').split('?')[0];
@@ -341,6 +350,23 @@ export default function App() {
                 onNavigateArticles={() => navigate('articles')}
                 onSelectArticle={slug => navigate('article', slug)}
               />
+            )}
+
+            {(activeView === 'write-article' || activeView === 'my-articles') && (
+              customerUser ? (
+                <CustomerArticlesPage
+                  customerUser={customerUser}
+                  mode={activeView === 'write-article' ? 'write' : 'list'}
+                  onNavigateArticles={() => navigate('articles')}
+                />
+              ) : (
+                <CustomerLogin
+                  onLoginSuccess={handleCustomerLoginSuccess}
+                  onNavigateRegister={() => navigate('register')}
+                  onNavigateHome={() => navigate('home')}
+                  redirectReason="Please sign in to write articles and submit them for review."
+                />
+              )
             )}
 
             {/* 3. Dedicated Product Landing & Sales Page (Protected by Customer Auth) */}
