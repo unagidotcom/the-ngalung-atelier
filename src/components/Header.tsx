@@ -109,23 +109,6 @@ export const Header: React.FC<HeaderProps> = ({
       onClick: () => onNavigate('contact'),
       active: currentView === 'contact'
     },
-    ...(!customerUser && hasAdminSession ? [{
-      label: 'Write Article',
-      icon: <FilePenLine className="h-4 w-4" />,
-      onClick: () => onNavigate('admin-write-article'),
-      active: currentView === 'admin'
-    }, {
-      label: 'Admin Dashboard',
-      icon: <ShieldCheck className="h-4 w-4" />,
-      onClick: () => onNavigate('admin'),
-      active: currentView === 'admin'
-    }] : []),
-    ...(!customerUser && !hasAdminSession ? [{
-      label: 'Admin Login',
-      icon: <ShieldCheck className="h-4 w-4" />,
-      onClick: () => onNavigate('admin'),
-      active: currentView === 'admin'
-    }] : []),
     ...(customerUser && onLogout ? [{
       label: 'Sign Out',
       icon: <LogOut className="h-4 w-4" />,

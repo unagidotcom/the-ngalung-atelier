@@ -14,6 +14,7 @@ import { CustomerLogin } from './components/CustomerLogin';
 import { CustomerRegister } from './components/CustomerRegister';
 import { CustomerAccount } from './components/CustomerAccount';
 import { AdminDashboard } from './components/AdminDashboard';
+import { AdminLogin } from './components/AdminLogin';
 import { TermsPage } from './components/legal/TermsPage';
 import { PrivacyPage } from './components/legal/PrivacyPage';
 import { RefundPolicyPage } from './components/legal/RefundPolicyPage';
@@ -88,7 +89,7 @@ export default function App() {
 
   // Track page views and product views
   useEffect(() => {
-    if (!currentPath.startsWith('/admin')) {
+    if (!currentPath.startsWith('/admin') && currentPath !== '/atelier-command-gate') {
       analytics.trackPageView(currentPath);
       if (currentPath.startsWith('/p/')) {
         const slug = currentPath.replace('/p/', '').split('/')[0];
@@ -167,6 +168,8 @@ export default function App() {
       newPath = '/account';
     } else if (view === 'admin') {
       newPath = '/admin';
+    } else if (view === 'admin-login') {
+      newPath = '/atelier-command-gate';
     } else if (view === 'admin-articles') {
       newPath = '/admin/articles';
     } else if (view === 'admin-write-article') {
@@ -216,6 +219,8 @@ export default function App() {
     activeView = 'register';
   } else if (currentPath === '/account') {
     activeView = 'account';
+  } else if (currentPath === '/atelier-command-gate') {
+    activeView = 'admin-login';
   } else if (currentPath === '/admin' || currentPath.startsWith('/admin/')) {
     activeView = 'admin';
   } else if (currentPath === '/terms') {
@@ -285,20 +290,22 @@ export default function App() {
     const adminUser = await checkAdminAuth().catch(() => null);
     navigate(adminUser ? 'admin-write-article' : 'write-article');
   };
+  const hideSiteShell = ['welcome', 'login', 'register', 'admin', 'admin-login'].includes(activeView);
 
   return (
     <div className="flex min-h-screen flex-col bg-[#FAF6EE] text-[#17181F] font-sans antialiased selection:bg-[#FF5A36] selection:text-white">
-      {/* Universal Header (Shows Home, Products, About, My Purchases, Customer Account / Sign In - NO Admin link) */}
-      <Header
-        settings={storeInfo}
-        currentView={activeView}
-        currency={currency}
-        onCurrencyChange={setCurrency}
-        onNavigate={navigate}
-        selectedSlug={activeSlug}
-        customerUser={customerUser}
-        onLogout={handleCustomerLogout}
-      />
+      {!hideSiteShell && (
+        <Header
+          settings={storeInfo}
+          currentView={activeView}
+          currency={currency}
+          onCurrencyChange={setCurrency}
+          onNavigate={navigate}
+          selectedSlug={activeSlug}
+          customerUser={customerUser}
+          onLogout={handleCustomerLogout}
+        />
+      )}
 
       {/* Main View Router */}
       <main className="flex-1">
@@ -319,7 +326,6 @@ export default function App() {
                 settings={storeInfo}
                 onNavigateLogin={() => navigate('login')}
                 onNavigateRegister={() => navigate('register')}
-                onNavigateAdmin={() => navigate('admin')}
               />
             )}
 
@@ -341,7 +347,6 @@ export default function App() {
                   settings={storeInfo}
                   onNavigateLogin={() => navigate('login')}
                   onNavigateRegister={() => navigate('register')}
-                  onNavigateAdmin={() => navigate('admin')}
                 />
               )
             )}
@@ -498,6 +503,13 @@ export default function App() {
               />
             )}
 
+            {activeView === 'admin-login' && (
+              <AdminLogin
+                onLoginSuccess={() => navigate('admin')}
+                onNavigateHome={() => navigate('home')}
+              />
+            )}
+
             {/* 10. Legal & Compliance Pages */}
             {activeView === 'terms' && (
               <TermsPage
@@ -532,8 +544,7 @@ export default function App() {
         )}
       </main>
 
-      {/* Universal Footer */}
-      <Footer settings={storeInfo} onNavigate={navigate} />
+      {!hideSiteShell && <Footer settings={storeInfo} onNavigate={navigate} />}
 
       {/* Checkout Modal */}
       {checkoutProduct && (

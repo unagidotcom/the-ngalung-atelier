@@ -59,8 +59,8 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
   };
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-[#F6F1E7] text-[#17181F]">
-      <div className="mx-auto grid min-h-[calc(100vh-4rem)] max-w-6xl grid-cols-1 lg:grid-cols-[0.95fr_1.05fr]">
+    <div className="min-h-screen bg-[#F6F1E7] text-[#17181F]">
+      <div className="mx-auto grid min-h-screen max-w-6xl grid-cols-1 lg:grid-cols-[0.95fr_1.05fr]">
         <section className="relative hidden overflow-hidden bg-[#11151D] px-8 py-10 text-[#FAF6EE] lg:flex lg:flex-col lg:justify-between">
           <div className="absolute inset-0 opacity-[0.08]" style={{ backgroundImage: 'linear-gradient(#FAF6EE 1px, transparent 1px), linear-gradient(90deg, #FAF6EE 1px, transparent 1px)', backgroundSize: '36px 36px' }} />
           <div className="relative flex items-center gap-3">
@@ -110,7 +110,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
           </div>
         </section>
 
-        <section className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-4 py-8 sm:px-6 lg:px-10">
+        <section className="flex min-h-screen items-center justify-center px-4 py-8 sm:px-6 lg:px-10">
           <div className="w-full max-w-md">
             <button
               type="button"

@@ -1,5 +1,16 @@
 import React, { useState } from 'react';
-import { Mail, Lock, User, ArrowRight, AlertCircle, ShieldCheck, ArrowLeft, LogIn, Eye, EyeOff } from 'lucide-react';
+import {
+  AlertCircle,
+  ArrowRight,
+  Eye,
+  EyeOff,
+  Lock,
+  LogIn,
+  Mail,
+  RefreshCw,
+  ShieldCheck,
+  User
+} from 'lucide-react';
 import { CustomerUser } from '../types';
 import { registerCustomer } from '../lib/api';
 import { LogoMark } from './LogoMark';
@@ -14,7 +25,6 @@ interface CustomerRegisterProps {
 export const CustomerRegister: React.FC<CustomerRegisterProps> = ({
   onRegisterSuccess,
   onNavigateLogin,
-  onNavigateHome,
   redirectReason
 }) => {
   const [name, setName] = useState('');
@@ -30,7 +40,7 @@ export const CustomerRegister: React.FC<CustomerRegisterProps> = ({
     e.preventDefault();
 
     if (!name || name.trim().length < 2) {
-      setErrorMsg('Please enter your full name (at least 2 characters).');
+      setErrorMsg('Please enter your full name.');
       return;
     }
 
@@ -45,7 +55,7 @@ export const CustomerRegister: React.FC<CustomerRegisterProps> = ({
     }
 
     if (password !== confirmPassword) {
-      setErrorMsg('Passwords do not match. Please re-enter your password.');
+      setErrorMsg('Passwords do not match.');
       return;
     }
 
@@ -73,184 +83,172 @@ export const CustomerRegister: React.FC<CustomerRegisterProps> = ({
   };
 
   return (
-    <div className="min-h-[80vh] bg-[#FAF6EE] text-[#17181F] py-14 px-4 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-md">
-        
-        {/* Back link */}
-        <button
-          onClick={onNavigateHome}
-          className="mb-6 inline-flex items-center gap-1.5 text-xs font-semibold text-[#6E6C63] hover:text-[#17181F] transition-colors cursor-pointer"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          <span>Back</span>
-        </button>
+    <div className="min-h-screen bg-[#0E1420] px-4 py-6 text-[#F7F1E7] sm:px-6">
+      <div className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-5xl flex-col">
+        <header className="flex items-center gap-3">
+          <LogoMark size={38} />
+          <span className="font-display text-lg font-bold tracking-tight">
+            The Ngalung Atelier
+          </span>
+        </header>
 
-        {/* Header */}
-        <div className="text-center space-y-2.5">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#FFE7DD] text-[#FF5A36] border border-[#FF5A36]/20 shadow-2xs">
-            <LogoMark size={28} />
-          </div>
-          <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight text-[#17181F]">
-            Create Account
-          </h1>
-          <p className="text-xs sm:text-sm text-[#6E6C63] max-w-xs mx-auto">
-            Organize all your digital products, lifetime updates, and invoices in one secure place.
-          </p>
-        </div>
-
-        {/* Context alert if redirected */}
-        {redirectReason && (
-          <div className="mt-6 rounded-2xl bg-[#FFE7DD] p-3 text-xs text-[#FF5A36] border border-[#FF5A36]/20 flex items-center gap-2">
-            <ShieldCheck className="h-4 w-4 shrink-0" />
-            <span>{redirectReason}</span>
-          </div>
-        )}
-
-        {/* Register Form Card */}
-        <div className="mt-6 rounded-3xl border border-[#E7DFCE] bg-[#FFFFFF] p-6 sm:p-8 shadow-2xs">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {errorMsg && (
-              <div className="flex items-center gap-2 rounded-2xl bg-red-50 p-3 text-xs text-red-700 border border-red-200">
-                <AlertCircle className="h-4 w-4 shrink-0 text-red-500" />
-                <span>{errorMsg}</span>
+        <main className="flex flex-1 items-center justify-center py-12">
+          <section className="w-full max-w-md">
+            <div className="rounded-[24px] border border-white/12 bg-[#121A2A] p-6 shadow-2xl shadow-black/35 sm:p-8">
+              <div className="space-y-5 text-center">
+                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[20px] border border-white/12 bg-white/8">
+                  <LogoMark size={42} />
+                </div>
+                <div className="space-y-2">
+                  <h1 className="font-display text-3xl font-bold tracking-tight text-[#F7F1E7]">
+                    Create your Atelier account
+                  </h1>
+                  <p className="mx-auto max-w-xs text-sm leading-6 text-[#AEB8C8]">
+                    Keep your ebooks, courses, templates, invoices, and lifetime updates inside one private vault.
+                  </p>
+                </div>
               </div>
-            )}
 
-            <div>
-              <label className="block text-xs font-semibold text-[#17181F] mb-1.5">
-                Full Name
-              </label>
-              <div className="relative">
-                <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#A6A296]" />
-                <input
-                  id="customer-register-name"
-                  type="text"
-                  required
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  placeholder="full name"
-                  className="w-full rounded-2xl border border-[#E7DFCE] bg-[#FAF6EE] py-2.5 pl-10 pr-4 text-xs sm:text-sm text-[#17181F] placeholder:text-[#A6A296] focus:border-[#FF5A36] focus:ring-1 focus:ring-[#FF5A36] focus:outline-none transition-all"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-[#17181F] mb-1.5">
-                Email Address
-              </label>
-              <div className="relative">
-                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#A6A296]" />
-                <input
-                  id="customer-register-email"
-                  type="email"
-                  required
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  placeholder="email address"
-                  className="w-full rounded-2xl border border-[#E7DFCE] bg-[#FAF6EE] py-2.5 pl-10 pr-4 text-xs sm:text-sm text-[#17181F] placeholder:text-[#A6A296] focus:border-[#FF5A36] focus:ring-1 focus:ring-[#FF5A36] focus:outline-none transition-all"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-[#17181F] mb-1.5">
-                Password <span className="text-[#A6A296] font-normal">(min. 6 characters)</span>
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#A6A296]" />
-                <input
-                  id="customer-register-password"
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full rounded-2xl border border-[#E7DFCE] bg-[#FAF6EE] py-2.5 pl-10 pr-10 text-xs sm:text-sm text-[#17181F] placeholder:text-[#A6A296] focus:border-[#FF5A36] focus:ring-1 focus:ring-[#FF5A36] focus:outline-none transition-all"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#A6A296] hover:text-[#17181F] transition-colors cursor-pointer"
-                  title={showPassword ? 'Hide password' : 'Show password'}
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-[#17181F] mb-1.5">
-                Confirm Password
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#A6A296]" />
-                <input
-                  id="customer-register-confirm-password"
-                  type={showConfirmPassword ? 'text' : 'password'}
-                  required
-                  value={confirmPassword}
-                  onChange={e => setConfirmPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full rounded-2xl border border-[#E7DFCE] bg-[#FAF6EE] py-2.5 pl-10 pr-10 text-xs sm:text-sm text-[#17181F] placeholder:text-[#A6A296] focus:border-[#FF5A36] focus:ring-1 focus:ring-[#FF5A36] focus:outline-none transition-all"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#A6A296] hover:text-[#17181F] transition-colors cursor-pointer"
-                  title={showConfirmPassword ? 'Hide password' : 'Show password'}
-                >
-                  {showConfirmPassword ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            <button
-              id="customer-register-submit-btn"
-              type="submit"
-              disabled={loading}
-              className="flex w-full items-center justify-center gap-2 rounded-full bg-[#17181F] py-3.5 text-xs sm:text-sm font-bold text-[#FAF6EE] shadow-sm hover:bg-[#31333F] disabled:opacity-50 transition-all cursor-pointer mt-2"
-            >
-              {loading ? (
-                <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-              ) : (
-                <>
-                  <span>Create Account</span>
-                  <ArrowRight className="h-4 w-4" />
-                </>
+              {redirectReason && (
+                <div className="mt-6 flex items-start gap-2.5 rounded-2xl border border-[#FF6A45]/30 bg-[#FF6A45]/10 p-3.5 text-xs font-semibold text-[#FFD0C3]">
+                  <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#3ED9A5]" />
+                  <span>{redirectReason}</span>
+                </div>
               )}
-            </button>
-          </form>
 
-          {/* Login Redirect */}
-          <div className="mt-6 border-t border-[#E7DFCE] pt-4 text-center">
-            <p className="text-xs text-[#6E6C63]">
-              Already have a customer account?{' '}
-              <button
-                id="customer-register-goto-login"
-                type="button"
-                onClick={onNavigateLogin}
-                className="font-bold text-[#FF5A36] hover:underline cursor-pointer inline-flex items-center gap-1"
-              >
-                <span>Sign In</span>
-                <LogIn className="h-3 w-3" />
-              </button>
-            </p>
-          </div>
-        </div>
+              <form onSubmit={handleSubmit} className="mt-7 space-y-4">
+                {errorMsg && (
+                  <div className="flex items-start gap-2.5 rounded-2xl border border-red-400/30 bg-red-500/10 p-3.5 text-xs font-semibold text-red-100" role="alert">
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-300" />
+                    <span>{errorMsg}</span>
+                  </div>
+                )}
 
-        {/* Password Security note */}
-        <div className="mt-6 text-center text-[11px] text-[#A6A296]">
-          <span>Protected with bcrypt salted password hashing and secure token sessions.</span>
-        </div>
+                <div className="space-y-1.5">
+                  <label htmlFor="customer-register-name" className="block text-xs font-bold text-[#F7F1E7]">
+                    Full name
+                  </label>
+                  <div className="relative">
+                    <User className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#7E899D]" />
+                    <input
+                      id="customer-register-name"
+                      type="text"
+                      required
+                      value={name}
+                      onChange={e => setName(e.target.value)}
+                      placeholder="Your name"
+                      className="h-12 w-full rounded-2xl border border-white/12 bg-[#0E1420] pl-10 pr-4 text-sm text-[#F7F1E7] outline-none transition placeholder:text-[#667085] focus:border-[#FF6A45] focus:ring-4 focus:ring-[#FF6A45]/15"
+                    />
+                  </div>
+                </div>
 
+                <div className="space-y-1.5">
+                  <label htmlFor="customer-register-email" className="block text-xs font-bold text-[#F7F1E7]">
+                    Email address
+                  </label>
+                  <div className="relative">
+                    <Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#7E899D]" />
+                    <input
+                      id="customer-register-email"
+                      type="email"
+                      required
+                      autoComplete="username"
+                      value={email}
+                      onChange={e => setEmail(e.target.value)}
+                      placeholder="you@example.com"
+                      className="h-12 w-full rounded-2xl border border-white/12 bg-[#0E1420] pl-10 pr-4 text-sm text-[#F7F1E7] outline-none transition placeholder:text-[#667085] focus:border-[#FF6A45] focus:ring-4 focus:ring-[#FF6A45]/15"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label htmlFor="customer-register-password" className="block text-xs font-bold text-[#F7F1E7]">
+                    Password
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#7E899D]" />
+                    <input
+                      id="customer-register-password"
+                      type={showPassword ? 'text' : 'password'}
+                      required
+                      autoComplete="new-password"
+                      value={password}
+                      onChange={e => setPassword(e.target.value)}
+                      placeholder="Minimum 6 characters"
+                      className="h-12 w-full rounded-2xl border border-white/12 bg-[#0E1420] pl-10 pr-12 text-sm text-[#F7F1E7] outline-none transition placeholder:text-[#667085] focus:border-[#FF6A45] focus:ring-4 focus:ring-[#FF6A45]/15"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-[#9FA8B8] transition hover:bg-white/10 hover:text-[#F7F1E7]"
+                      title={showPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label htmlFor="customer-register-confirm-password" className="block text-xs font-bold text-[#F7F1E7]">
+                    Confirm password
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#7E899D]" />
+                    <input
+                      id="customer-register-confirm-password"
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      required
+                      autoComplete="new-password"
+                      value={confirmPassword}
+                      onChange={e => setConfirmPassword(e.target.value)}
+                      placeholder="Repeat password"
+                      className="h-12 w-full rounded-2xl border border-white/12 bg-[#0E1420] pl-10 pr-12 text-sm text-[#F7F1E7] outline-none transition placeholder:text-[#667085] focus:border-[#FF6A45] focus:ring-4 focus:ring-[#FF6A45]/15"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-3.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-[#9FA8B8] transition hover:bg-white/10 hover:text-[#F7F1E7]"
+                      title={showConfirmPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  id="customer-register-submit-btn"
+                  type="submit"
+                  disabled={loading}
+                  className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#FF6A45] px-5 text-sm font-bold text-white shadow-lg shadow-[#FF6A45]/25 transition hover:bg-[#E95732] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {loading ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                      <span>Creating account</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Create Account</span>
+                      <ArrowRight className="h-4 w-4" />
+                    </>
+                  )}
+                </button>
+              </form>
+
+              <div className="mt-6 text-center">
+                <button
+                  id="customer-register-goto-login"
+                  type="button"
+                  onClick={onNavigateLogin}
+                  className="inline-flex items-center justify-center gap-2 text-sm font-bold text-[#D8E1EF] transition hover:text-[#FFB49F]"
+                >
+                  <span>Already have an account? Sign in</span>
+                  <LogIn className="h-4 w-4 text-[#3ED9A5]" />
+                </button>
+              </div>
+            </div>
+          </section>
+        </main>
       </div>
     </div>
   );
