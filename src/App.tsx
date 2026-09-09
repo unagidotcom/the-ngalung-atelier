@@ -19,7 +19,7 @@ import { PrivacyPage } from './components/legal/PrivacyPage';
 import { RefundPolicyPage } from './components/legal/RefundPolicyPage';
 import { ContactPage } from './components/legal/ContactPage';
 import { Product, PublicStoreInfo, CustomerUser, CustomerOrder } from './types';
-import { fetchProducts, fetchPublicStoreInfo, checkCustomerAuth, logoutCustomer, fetchCustomerOrders } from './lib/api';
+import { fetchProducts, fetchPublicStoreInfo, checkCustomerAuth, checkAdminAuth, logoutCustomer, fetchCustomerOrders } from './lib/api';
 import { analytics } from './lib/analytics';
 
 export default function App() {
@@ -167,6 +167,8 @@ export default function App() {
       newPath = '/account';
     } else if (view === 'admin') {
       newPath = '/admin';
+    } else if (view === 'admin-articles') {
+      newPath = '/admin/articles';
     } else if (view === 'terms') {
       newPath = '/terms';
     } else if (view === 'privacy') {
@@ -277,6 +279,11 @@ export default function App() {
     navigate('home'); // Return to Welcome screen on '/'
   };
 
+  const handleWriteArticleNavigation = async () => {
+    const adminUser = await checkAdminAuth().catch(() => null);
+    navigate(adminUser ? 'admin-articles' : 'write-article');
+  };
+
   return (
     <div className="flex min-h-screen flex-col bg-[#FAF6EE] text-[#17181F] font-sans antialiased selection:bg-[#FF5A36] selection:text-white">
       {/* Universal Header (Shows Home, Products, About, My Purchases, Customer Account / Sign In - NO Admin link) */}
@@ -340,7 +347,7 @@ export default function App() {
             {activeView === 'articles' && (
               <ArticleLibraryPage
                 onSelectArticle={slug => navigate('article', slug)}
-                onWriteArticle={() => navigate('write-article')}
+                onWriteArticle={handleWriteArticleNavigation}
               />
             )}
 
@@ -484,6 +491,7 @@ export default function App() {
                 onNavigateHome={() => navigate('home')}
                 onPreviewProduct={slug => navigate('product', slug)}
                 onPreviewArticle={slug => navigate('article', slug)}
+                initialTab={currentPath.startsWith('/admin/articles') ? 'articles' : undefined}
               />
             )}
 

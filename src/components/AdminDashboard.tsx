@@ -68,6 +68,7 @@ interface AdminDashboardProps {
   onNavigateHome: () => void;
   onPreviewProduct: (slug: string) => void;
   onPreviewArticle: (slug: string) => void;
+  initialTab?: AdminTab;
 }
 
 type AdminTab = 'dashboard' | 'products' | 'articles' | 'orders' | 'customers' | 'analytics' | 'settings';
@@ -75,14 +76,15 @@ type AdminTab = 'dashboard' | 'products' | 'articles' | 'orders' | 'customers' |
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onNavigateHome,
   onPreviewProduct,
-  onPreviewArticle
+  onPreviewArticle,
+  initialTab
 }) => {
   // Authentication State
   const [currentUser, setCurrentUser] = useState<AdminUser | null>(null);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
   // Active Navigation Tab
-  const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
+  const [activeTab, setActiveTab] = useState<AdminTab>(() => initialTab || 'dashboard');
 
   // Data State
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -131,6 +133,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
     verifySession();
   }, []);
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
 
   const loadAllData = async () => {
     setLoading(true);
