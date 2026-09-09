@@ -61,7 +61,6 @@ import { OrdersManagement } from './admin/OrdersManagement';
 import { CustomersManagement } from './admin/CustomersManagement';
 import { AnalyticsOverview } from './admin/AnalyticsOverview';
 import { SettingsSection } from './admin/SettingsSection';
-import { ThreeDotMenu } from './ui/ThreeDotMenu';
 import { LogoutConfirmationModal } from './ui/LogoutConfirmationModal';
 
 interface AdminDashboardProps {
@@ -409,29 +408,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
               <span className="hidden md:inline">Refresh Data</span>
             </button>
-
-            <ThreeDotMenu
-              buttonClassName="border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white"
-              menuClassName="border-slate-200"
-              items={[
-                {
-                  label: 'Refresh Data',
-                  icon: <RefreshCw className="h-4 w-4" />,
-                  onClick: loadAllData
-                },
-                {
-                  label: 'View Storefront',
-                  icon: <Store className="h-4 w-4" />,
-                  onClick: onNavigateHome
-                },
-                {
-                  label: 'Logout',
-                  icon: <LogOut className="h-4 w-4" />,
-                  onClick: () => setConfirmLogout(true),
-                  danger: true
-                }
-              ]}
-            />
           </div>
         </div>
       </header>

@@ -51,6 +51,7 @@ export const Header: React.FC<HeaderProps> = ({
   const [hasAdminSession, setHasAdminSession] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
   const storeName = settings?.storeName || 'The Ngalung Atelier';
+  const isAdminView = currentView === 'admin';
 
   useEffect(() => {
     let mounted = true;
@@ -195,42 +196,44 @@ export const Header: React.FC<HeaderProps> = ({
             })}
           </nav>
 
-          <div className="flex shrink-0 items-center gap-2">
-            {customerUser ? (
-              <button
-                id="header-account-btn"
-                type="button"
-                onClick={() => onNavigate('account')}
-                className={`inline-flex h-9 items-center gap-2 rounded-full px-3 text-xs font-bold transition ${
-                  currentView === 'account'
-                    ? 'bg-[#FF5A36] text-white'
-                    : 'bg-[#17181F] text-[#FAF6EE] hover:bg-[#31333F]'
-                }`}
-              >
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/15 text-[10px]">
-                  {customerUser.name.charAt(0).toUpperCase()}
-                </span>
-                <span className="hidden max-w-[92px] truncate sm:inline">{customerUser.name.split(' ')[0]}</span>
-                <span className="sm:hidden">Account</span>
-              </button>
-            ) : (
-              <button
-                id="header-signin-btn"
-                type="button"
-                onClick={() => onNavigate('login')}
-                className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-xs font-bold transition ${
-                  currentView === 'login'
-                    ? 'bg-[#17181F] text-[#FAF6EE]'
-                    : 'border border-[#E7DFCE] bg-white text-[#17181F] hover:bg-[#F3EDE0]'
-                }`}
-              >
-                <LogIn className="h-3.5 w-3.5 text-[#FF5A36]" />
-                <span>Sign In</span>
-              </button>
-            )}
+          {!isAdminView && (
+            <div className="flex shrink-0 items-center gap-2">
+              {customerUser ? (
+                <button
+                  id="header-account-btn"
+                  type="button"
+                  onClick={() => onNavigate('account')}
+                  className={`inline-flex h-9 items-center gap-2 rounded-full px-3 text-xs font-bold transition ${
+                    currentView === 'account'
+                      ? 'bg-[#FF5A36] text-white'
+                      : 'bg-[#17181F] text-[#FAF6EE] hover:bg-[#31333F]'
+                  }`}
+                >
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/15 text-[10px]">
+                    {customerUser.name.charAt(0).toUpperCase()}
+                  </span>
+                  <span className="hidden max-w-[92px] truncate sm:inline">{customerUser.name.split(' ')[0]}</span>
+                  <span className="sm:hidden">Account</span>
+                </button>
+              ) : (
+                <button
+                  id="header-signin-btn"
+                  type="button"
+                  onClick={() => onNavigate('login')}
+                  className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-xs font-bold transition ${
+                    currentView === 'login'
+                      ? 'bg-[#17181F] text-[#FAF6EE]'
+                      : 'border border-[#E7DFCE] bg-white text-[#17181F] hover:bg-[#F3EDE0]'
+                  }`}
+                >
+                  <LogIn className="h-3.5 w-3.5 text-[#FF5A36]" />
+                  <span>Sign In</span>
+                </button>
+              )}
 
-            <ThreeDotMenu items={menuItems} />
-          </div>
+              <ThreeDotMenu items={menuItems} />
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-4 border-t border-[#E7DFCE] bg-[#FAF6EE] px-2 py-1.5 md:hidden">
