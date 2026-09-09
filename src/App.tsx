@@ -340,6 +340,7 @@ export default function App() {
             {activeView === 'articles' && (
               <ArticleLibraryPage
                 onSelectArticle={slug => navigate('article', slug)}
+                onWriteArticle={() => navigate('write-article')}
               />
             )}
 

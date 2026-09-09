@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowRight, BookOpen, Clock, Search, UserRound } from 'lucide-react';
+import { ArrowRight, BookOpen, Clock, FilePenLine, Search, UserRound } from 'lucide-react';
 import { Article } from '../types';
 import { fetchArticles } from '../lib/api';
 import { calculateReadingTime } from '../lib/articleMarkdown';
 
 interface ArticleLibraryPageProps {
   onSelectArticle: (slug: string) => void;
+  onWriteArticle: () => void;
 }
 
 const categories = [
@@ -23,7 +24,7 @@ function formatDate(value?: string) {
   return new Date(value).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-export const ArticleLibraryPage: React.FC<ArticleLibraryPageProps> = ({ onSelectArticle }) => {
+export const ArticleLibraryPage: React.FC<ArticleLibraryPageProps> = ({ onSelectArticle, onWriteArticle }) => {
   const [articles, setArticles] = useState<Article[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
@@ -78,6 +79,15 @@ export const ArticleLibraryPage: React.FC<ArticleLibraryPageProps> = ({ onSelect
             <p className="max-w-2xl text-sm leading-relaxed text-[#6E6C63] sm:text-base">
               Practical guides on freelancing, client acquisition, marketing, AI, digital business, and building better systems.
             </p>
+            <button
+              type="button"
+              onClick={onWriteArticle}
+              className="inline-flex items-center gap-2 rounded-full bg-[#FF5A36] px-5 py-3 text-xs font-bold text-white shadow-2xs transition hover:bg-[#E94D2C]"
+            >
+              <FilePenLine className="h-4 w-4" />
+              Write Article
+              <ArrowRight className="h-4 w-4" />
+            </button>
           </div>
         </div>
       </section>
@@ -124,6 +134,14 @@ export const ArticleLibraryPage: React.FC<ArticleLibraryPageProps> = ({ onSelect
           <div className="mt-8 rounded-3xl border border-dashed border-[#D8CDB4] bg-[#FFFFFF] p-10 text-center">
             <h2 className="font-display text-xl font-bold text-[#17181F]">No published articles yet</h2>
             <p className="mt-2 text-sm text-[#6E6C63]">Published articles will appear here automatically.</p>
+            <button
+              type="button"
+              onClick={onWriteArticle}
+              className="mt-5 inline-flex items-center gap-2 rounded-full bg-[#17181F] px-5 py-3 text-xs font-bold text-[#FAF6EE] transition hover:bg-[#31333F]"
+            >
+              <FilePenLine className="h-4 w-4 text-[#FF5A36]" />
+              Write Article
+            </button>
           </div>
         ) : (
           <section className="grid grid-cols-1 gap-6 pt-8 md:grid-cols-2 lg:grid-cols-3">
