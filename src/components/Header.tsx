@@ -12,6 +12,7 @@ import {
   Package,
   ReceiptText,
   ShieldCheck,
+  Sparkles,
   UserRound,
   UserPlus
 } from 'lucide-react';
@@ -52,6 +53,7 @@ export const Header: React.FC<HeaderProps> = ({
   const [confirmLogout, setConfirmLogout] = useState(false);
   const storeName = settings?.storeName || 'The Ngalung Atelier';
   const isAdminView = currentView === 'admin';
+  const isLoginView = currentView === 'login';
 
   useEffect(() => {
     let mounted = true;
@@ -175,28 +177,42 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           </div>
 
-          <nav className="hidden items-center gap-1 md:flex">
-            {navItems.map(({ view, label, icon: Icon }) => {
-              const active = currentView === view || (view === 'articles' && currentView === 'article');
-              return (
-                <button
-                  key={view}
-                  type="button"
-                  onClick={() => handleNavClick(view)}
-                  className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-bold transition ${
-                    active
-                      ? 'bg-[#17181F] text-[#FAF6EE]'
-                      : 'text-[#5F6170] hover:bg-[#F3EDE0] hover:text-[#17181F]'
-                  }`}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  <span>{label}</span>
-                </button>
-              );
-            })}
-          </nav>
+          {!isLoginView && (
+            <nav className="hidden items-center gap-1 md:flex">
+              {navItems.map(({ view, label, icon: Icon }) => {
+                const active = currentView === view || (view === 'articles' && currentView === 'article');
+                return (
+                  <button
+                    key={view}
+                    type="button"
+                    onClick={() => handleNavClick(view)}
+                    className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-bold transition ${
+                      active
+                        ? 'bg-[#17181F] text-[#FAF6EE]'
+                        : 'text-[#5F6170] hover:bg-[#F3EDE0] hover:text-[#17181F]'
+                    }`}
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                    <span>{label}</span>
+                  </button>
+                );
+              })}
+            </nav>
+          )}
 
-          {!isAdminView && (
+          {isLoginView && (
+            <div className="ml-auto hidden items-center gap-3 rounded-full border border-[#E7DFCE] bg-white/80 px-3.5 py-2 shadow-2xs md:flex">
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#17181F] text-[#FAF6EE]">
+                <ShieldCheck className="h-3.5 w-3.5 text-[#32B67A]" />
+              </span>
+              <span className="font-mono text-[11px] font-bold uppercase tracking-wider text-[#5F6170]">
+                Private Vault Access
+              </span>
+              <Sparkles className="h-3.5 w-3.5 text-[#FF5A36]" />
+            </div>
+          )}
+
+          {!isAdminView && !isLoginView && (
             <div className="flex shrink-0 items-center gap-2">
               {customerUser ? (
                 <button
@@ -236,23 +252,25 @@ export const Header: React.FC<HeaderProps> = ({
           )}
         </div>
 
-        <div className="grid grid-cols-4 border-t border-[#E7DFCE] bg-[#FAF6EE] px-2 py-1.5 md:hidden">
-          {navItems.map(({ view, label }) => {
-            const active = currentView === view || (view === 'articles' && currentView === 'article');
-            return (
-              <button
-                key={view}
-                type="button"
-                onClick={() => handleNavClick(view)}
-                className={`rounded-xl px-2 py-1.5 text-xs font-bold ${
-                  active ? 'bg-[#17181F] text-[#FAF6EE]' : 'text-[#6E6C63]'
-                }`}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
+        {!isLoginView && (
+          <div className="grid grid-cols-4 border-t border-[#E7DFCE] bg-[#FAF6EE] px-2 py-1.5 md:hidden">
+            {navItems.map(({ view, label }) => {
+              const active = currentView === view || (view === 'articles' && currentView === 'article');
+              return (
+                <button
+                  key={view}
+                  type="button"
+                  onClick={() => handleNavClick(view)}
+                  className={`rounded-xl px-2 py-1.5 text-xs font-bold ${
+                    active ? 'bg-[#17181F] text-[#FAF6EE]' : 'text-[#6E6C63]'
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </header>
 
       {confirmLogout && (
