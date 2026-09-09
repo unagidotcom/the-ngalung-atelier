@@ -107,6 +107,11 @@ export const Header: React.FC<HeaderProps> = ({
       active: currentView === 'contact'
     },
     ...(!customerUser && hasAdminSession ? [{
+      label: 'Write Article',
+      icon: <FilePenLine className="h-4 w-4" />,
+      onClick: () => onNavigate('admin-write-article'),
+      active: currentView === 'admin'
+    }, {
       label: 'Admin Dashboard',
       icon: <ShieldCheck className="h-4 w-4" />,
       onClick: () => onNavigate('admin'),
@@ -123,6 +128,14 @@ export const Header: React.FC<HeaderProps> = ({
   const handleLogoutConfirm = () => {
     setConfirmLogout(false);
     onLogout?.();
+  };
+
+  const handleNavClick = (view: string) => {
+    if (!customerUser && hasAdminSession && view === 'articles') {
+      onNavigate('admin-write-article');
+      return;
+    }
+    onNavigate(view);
   };
 
   return (
@@ -162,7 +175,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <button
                   key={view}
                   type="button"
-                  onClick={() => onNavigate(view)}
+                  onClick={() => handleNavClick(view)}
                   className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-bold transition ${
                     active
                       ? 'bg-[#17181F] text-[#FAF6EE]'
@@ -221,7 +234,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 key={view}
                 type="button"
-                onClick={() => onNavigate(view)}
+                onClick={() => handleNavClick(view)}
                 className={`rounded-xl px-2 py-1.5 text-xs font-bold ${
                   active ? 'bg-[#17181F] text-[#FAF6EE]' : 'text-[#6E6C63]'
                 }`}

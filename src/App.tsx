@@ -169,6 +169,8 @@ export default function App() {
       newPath = '/admin';
     } else if (view === 'admin-articles') {
       newPath = '/admin/articles';
+    } else if (view === 'admin-write-article') {
+      newPath = '/admin/articles/write';
     } else if (view === 'terms') {
       newPath = '/terms';
     } else if (view === 'privacy') {
@@ -281,7 +283,7 @@ export default function App() {
 
   const handleWriteArticleNavigation = async () => {
     const adminUser = await checkAdminAuth().catch(() => null);
-    navigate(adminUser ? 'admin-articles' : 'write-article');
+    navigate(adminUser ? 'admin-write-article' : 'write-article');
   };
 
   return (
@@ -492,6 +494,7 @@ export default function App() {
                 onPreviewProduct={slug => navigate('product', slug)}
                 onPreviewArticle={slug => navigate('article', slug)}
                 initialTab={currentPath.startsWith('/admin/articles') ? 'articles' : undefined}
+                initialWriteArticle={currentPath.startsWith('/admin/articles/write')}
               />
             )}
 

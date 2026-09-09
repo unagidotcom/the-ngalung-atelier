@@ -69,6 +69,7 @@ interface AdminDashboardProps {
   onPreviewProduct: (slug: string) => void;
   onPreviewArticle: (slug: string) => void;
   initialTab?: AdminTab;
+  initialWriteArticle?: boolean;
 }
 
 type AdminTab = 'dashboard' | 'products' | 'articles' | 'orders' | 'customers' | 'analytics' | 'settings';
@@ -77,7 +78,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onNavigateHome,
   onPreviewProduct,
   onPreviewArticle,
-  initialTab
+  initialTab,
+  initialWriteArticle
 }) => {
   // Authentication State
   const [currentUser, setCurrentUser] = useState<AdminUser | null>(null);
@@ -661,6 +663,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               articles={articles}
               onRefreshArticles={loadAllData}
               onPreviewPublicArticle={onPreviewArticle}
+              autoOpenWriter={initialWriteArticle}
             />
           )}
 

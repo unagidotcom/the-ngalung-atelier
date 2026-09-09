@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive,
   BookOpen,
@@ -31,6 +31,7 @@ interface ArticleManagementProps {
   articles: Article[];
   onRefreshArticles: () => void;
   onPreviewPublicArticle: (slug: string) => void;
+  autoOpenWriter?: boolean;
 }
 
 const categoryOptions = [
@@ -115,7 +116,8 @@ function reviewStatusLabel(status?: ArticleReviewStatus) {
 export const ArticleManagement: React.FC<ArticleManagementProps> = ({
   articles,
   onRefreshArticles,
-  onPreviewPublicArticle
+  onPreviewPublicArticle,
+  autoOpenWriter = false
 }) => {
   const [filterStatus, setFilterStatus] = useState<'ALL' | ArticleStatus | 'CUSTOMER_REVIEW' | 'SCHEDULED'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
@@ -127,6 +129,15 @@ export const ArticleManagement: React.FC<ArticleManagementProps> = ({
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const autoOpenedWriterRef = useRef(false);
+
+  useEffect(() => {
+    if (autoOpenWriter && !autoOpenedWriterRef.current) {
+      autoOpenedWriterRef.current = true;
+      setEditingArticle({ ...firstArticleDraft });
+      setError('');
+    }
+  }, [autoOpenWriter]);
 
   const filteredArticles = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
