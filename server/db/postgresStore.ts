@@ -4,6 +4,8 @@ import { getPool, query, withTransaction } from './client';
 import {
   Product,
   ProductStatus,
+  Article,
+  ArticleStatus,
   Order,
   OrderStatus,
   AnalyticsEvent,
@@ -99,6 +101,59 @@ function mapCustomerRow(row: any): CustomerRecord {
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
     updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString()
   };
+}
+
+function parseJsonArray(value: any): string[] {
+  if (Array.isArray(value)) return value.map(item => String(item));
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed.map(item => String(item)) : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function mapArticleRow(row: any): Article {
+  return {
+    id: row.id,
+    title: row.title,
+    slug: row.slug,
+    excerpt: row.excerpt || '',
+    content: row.content || '',
+    author: row.author || 'Ng Kharinghor',
+    category: row.category || 'Digital Business',
+    tags: parseJsonArray(row.tags),
+    featuredImage: row.featured_image || '',
+    featuredImageAlt: row.featured_image_alt || '',
+    primaryKeyword: row.primary_keyword || '',
+    secondaryKeywords: parseJsonArray(row.secondary_keywords),
+    seoTitle: row.seo_title || row.title,
+    metaDescription: row.meta_description || row.excerpt || '',
+    canonicalUrl: row.canonical_url || '',
+    ogTitle: row.og_title || row.seo_title || row.title,
+    ogDescription: row.og_description || row.meta_description || row.excerpt || '',
+    ogImage: row.og_image || row.featured_image || '',
+    socialShareTitle: row.social_share_title || '',
+    socialShareDescription: row.social_share_description || '',
+    socialShareImage: row.social_share_image || '',
+    status: row.status || 'draft',
+    publishedAt: row.published_at ? new Date(row.published_at).toISOString() : undefined,
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+    updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString(),
+    bookCta: typeof row.book_cta === 'string' ? JSON.parse(row.book_cta || '{}') : row.book_cta || undefined,
+    views: Number(row.views || 0)
+  };
+}
+
+function normalizeArticleSlug(value: string): string {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '') || 'untitled-article';
 }
 
 export class PostgresStore {
@@ -298,6 +353,239 @@ export class PostgresStore {
     await query(`UPDATE products SET is_published = true, status = 'published', updated_at = NOW() WHERE id = $1`, [prod.id]);
     const updated = await this.getProductById(prod.id);
     return { success: true, product: updated, message: 'Product published to storefront' };
+  }
+
+  // Articles
+  async getArticles(includePrivate = false): Promise<Article[]> {
+    const where = includePrivate ? '' : `WHERE a.status = 'published'`;
+    const res = await query(`
+      SELECT a.*,
+        COUNT(e.id) FILTER (
+          WHERE e.type IN ('article_view', 'page_view', 'visit')
+          AND (e.article_slug = a.slug OR e.path = '/articles/' || a.slug)
+        )::int AS views
+      FROM articles a
+      LEFT JOIN analytics_events e ON e.article_slug = a.slug OR e.path = '/articles/' || a.slug
+      ${where}
+      GROUP BY a.id
+      ORDER BY COALESCE(a.published_at, a.updated_at, a.created_at) DESC
+    `);
+    return res.rows.map(mapArticleRow);
+  }
+
+  async getArticleBySlug(slug: string, includePrivate = false): Promise<Article | undefined> {
+    const res = await query(`
+      SELECT a.*,
+        COUNT(e.id) FILTER (
+          WHERE e.type IN ('article_view', 'page_view', 'visit')
+          AND (e.article_slug = a.slug OR e.path = '/articles/' || a.slug)
+        )::int AS views
+      FROM articles a
+      LEFT JOIN analytics_events e ON e.article_slug = a.slug OR e.path = '/articles/' || a.slug
+      WHERE a.slug = $1 ${includePrivate ? '' : "AND a.status = 'published'"}
+      GROUP BY a.id
+      LIMIT 1
+    `, [slug]);
+    if (res.rows.length === 0) return undefined;
+    return mapArticleRow(res.rows[0]);
+  }
+
+  async getArticleById(id: string): Promise<Article | undefined> {
+    const res = await query(`
+      SELECT a.*,
+        COUNT(e.id) FILTER (
+          WHERE e.type IN ('article_view', 'page_view', 'visit')
+          AND (e.article_slug = a.slug OR e.path = '/articles/' || a.slug)
+        )::int AS views
+      FROM articles a
+      LEFT JOIN analytics_events e ON e.article_slug = a.slug OR e.path = '/articles/' || a.slug
+      WHERE a.id = $1
+      GROUP BY a.id
+      LIMIT 1
+    `, [id]);
+    if (res.rows.length === 0) return undefined;
+    return mapArticleRow(res.rows[0]);
+  }
+
+  async saveArticle(articleData: Partial<Article>): Promise<Article> {
+    const now = new Date().toISOString();
+    const status: ArticleStatus = articleData.status || 'draft';
+    const existing = articleData.id ? await this.getArticleById(articleData.id) : undefined;
+    const baseSlug = normalizeArticleSlug(articleData.slug || articleData.title || 'untitled-article');
+    const slug = await this.ensureUniqueArticleSlug(baseSlug, articleData.id);
+    const publishedAt = status === 'published'
+      ? (articleData.publishedAt || existing?.publishedAt || now)
+      : articleData.publishedAt || null;
+
+    if (existing) {
+      const updated: Article = {
+        ...existing,
+        ...articleData,
+        slug,
+        status,
+        tags: articleData.tags || existing.tags || [],
+        secondaryKeywords: articleData.secondaryKeywords || existing.secondaryKeywords || [],
+        publishedAt: publishedAt || undefined,
+        updatedAt: now
+      } as Article;
+
+      await query(`
+        UPDATE articles SET
+          title = $1, slug = $2, excerpt = $3, content = $4, author = $5,
+          category = $6, tags = $7, featured_image = $8, featured_image_alt = $9,
+          primary_keyword = $10, secondary_keywords = $11, seo_title = $12,
+          meta_description = $13, canonical_url = $14, og_title = $15,
+          og_description = $16, og_image = $17, social_share_title = $18,
+          social_share_description = $19, social_share_image = $20, status = $21,
+          published_at = $22, book_cta = $23, updated_at = NOW()
+        WHERE id = $24
+      `, [
+        updated.title, updated.slug, updated.excerpt, updated.content, updated.author,
+        updated.category, JSON.stringify(updated.tags || []), updated.featuredImage, updated.featuredImageAlt,
+        updated.primaryKeyword, JSON.stringify(updated.secondaryKeywords || []), updated.seoTitle,
+        updated.metaDescription, updated.canonicalUrl || null, updated.ogTitle,
+        updated.ogDescription, updated.ogImage, updated.socialShareTitle || null,
+        updated.socialShareDescription || null, updated.socialShareImage || null, updated.status,
+        updated.publishedAt || null, JSON.stringify(updated.bookCta || {}), updated.id
+      ]);
+      return (await this.getArticleById(updated.id)) || updated;
+    }
+
+    const article: Article = {
+      id: 'art_' + crypto.randomBytes(8).toString('hex'),
+      title: articleData.title || 'Untitled Article',
+      slug,
+      excerpt: articleData.excerpt || '',
+      content: articleData.content || '',
+      author: articleData.author || 'Ng Kharinghor',
+      category: articleData.category || 'Digital Business',
+      tags: articleData.tags || [],
+      featuredImage: articleData.featuredImage || '',
+      featuredImageAlt: articleData.featuredImageAlt || '',
+      primaryKeyword: articleData.primaryKeyword || '',
+      secondaryKeywords: articleData.secondaryKeywords || [],
+      seoTitle: articleData.seoTitle || articleData.title || 'Untitled Article',
+      metaDescription: articleData.metaDescription || articleData.excerpt || '',
+      canonicalUrl: articleData.canonicalUrl || '',
+      ogTitle: articleData.ogTitle || articleData.seoTitle || articleData.title || 'Untitled Article',
+      ogDescription: articleData.ogDescription || articleData.metaDescription || articleData.excerpt || '',
+      ogImage: articleData.ogImage || articleData.featuredImage || '',
+      socialShareTitle: articleData.socialShareTitle || articleData.ogTitle || articleData.seoTitle || articleData.title || '',
+      socialShareDescription: articleData.socialShareDescription || articleData.ogDescription || articleData.metaDescription || articleData.excerpt || '',
+      socialShareImage: articleData.socialShareImage || articleData.ogImage || articleData.featuredImage || '',
+      status,
+      publishedAt: publishedAt || undefined,
+      createdAt: now,
+      updatedAt: now,
+      bookCta: articleData.bookCta
+    };
+
+    await query(`
+      INSERT INTO articles (
+        id, title, slug, excerpt, content, author, category, tags,
+        featured_image, featured_image_alt, primary_keyword, secondary_keywords,
+        seo_title, meta_description, canonical_url, og_title, og_description,
+        og_image, social_share_title, social_share_description, social_share_image,
+        status, published_at, book_cta, created_at, updated_at
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8,
+        $9, $10, $11, $12,
+        $13, $14, $15, $16, $17,
+        $18, $19, $20, $21,
+        $22, $23, $24, NOW(), NOW()
+      )
+    `, [
+      article.id, article.title, article.slug, article.excerpt, article.content, article.author, article.category,
+      JSON.stringify(article.tags || []), article.featuredImage, article.featuredImageAlt, article.primaryKeyword,
+      JSON.stringify(article.secondaryKeywords || []), article.seoTitle, article.metaDescription, article.canonicalUrl || null,
+      article.ogTitle, article.ogDescription, article.ogImage, article.socialShareTitle || null,
+      article.socialShareDescription || null, article.socialShareImage || null, article.status,
+      article.publishedAt || null, JSON.stringify(article.bookCta || {})
+    ]);
+
+    return article;
+  }
+
+  async publishArticle(idOrSlug: string): Promise<{ success: boolean; article?: Article; message?: string }> {
+    const article = await this.getArticleById(idOrSlug) || await this.getArticleBySlug(idOrSlug, true);
+    if (!article) return { success: false, message: 'Article not found' };
+    await query(`UPDATE articles SET status = 'published', published_at = COALESCE(published_at, NOW()), updated_at = NOW() WHERE id = $1`, [article.id]);
+    return { success: true, article: await this.getArticleById(article.id), message: 'Article published' };
+  }
+
+  async unpublishArticle(idOrSlug: string): Promise<{ success: boolean; article?: Article; message?: string }> {
+    const article = await this.getArticleById(idOrSlug) || await this.getArticleBySlug(idOrSlug, true);
+    if (!article) return { success: false, message: 'Article not found' };
+    await query(`UPDATE articles SET status = 'draft', updated_at = NOW() WHERE id = $1`, [article.id]);
+    return { success: true, article: await this.getArticleById(article.id), message: 'Article moved to draft' };
+  }
+
+  async archiveArticle(idOrSlug: string): Promise<{ success: boolean; article?: Article; message?: string }> {
+    const article = await this.getArticleById(idOrSlug) || await this.getArticleBySlug(idOrSlug, true);
+    if (!article) return { success: false, message: 'Article not found' };
+    await query(`UPDATE articles SET status = 'archived', updated_at = NOW() WHERE id = $1`, [article.id]);
+    return { success: true, article: await this.getArticleById(article.id), message: 'Article archived' };
+  }
+
+  async deleteArticle(idOrSlug: string): Promise<{ success: boolean; message?: string }> {
+    const article = await this.getArticleById(idOrSlug) || await this.getArticleBySlug(idOrSlug, true);
+    if (!article) return { success: false, message: 'Article not found' };
+    await query(`DELETE FROM articles WHERE id = $1`, [article.id]);
+    return { success: true, message: 'Article deleted' };
+  }
+
+  async getRelatedArticles(article: Article, limit = 3): Promise<Article[]> {
+    const tags = article.tags || [];
+    const res = await query(`
+      SELECT a.*,
+        COUNT(e.id) FILTER (
+          WHERE e.type IN ('article_view', 'page_view', 'visit')
+          AND (e.article_slug = a.slug OR e.path = '/articles/' || a.slug)
+        )::int AS views,
+        CASE WHEN a.category = $2 THEN 2 ELSE 0 END +
+        COALESCE((
+          SELECT COUNT(*)::int
+          FROM jsonb_array_elements_text(a.tags) tag
+          WHERE LOWER(tag) = ANY($3::text[])
+        ), 0) AS relevance
+      FROM articles a
+      LEFT JOIN analytics_events e ON e.article_slug = a.slug OR e.path = '/articles/' || a.slug
+      WHERE a.status = 'published' AND a.id != $1
+      GROUP BY a.id
+      HAVING CASE WHEN a.category = $2 THEN 2 ELSE 0 END +
+        COALESCE((
+          SELECT COUNT(*)::int
+          FROM jsonb_array_elements_text(a.tags) tag
+          WHERE LOWER(tag) = ANY($3::text[])
+        ), 0) > 0
+      ORDER BY relevance DESC, COALESCE(a.published_at, a.updated_at, a.created_at) DESC
+      LIMIT $4
+    `, [article.id, article.category, tags.map(t => t.toLowerCase()), limit]);
+    return res.rows.map(mapArticleRow);
+  }
+
+  async getArticleViews(slug: string): Promise<number> {
+    const res = await query(`
+      SELECT COUNT(*)::int AS count
+      FROM analytics_events
+      WHERE type IN ('article_view', 'page_view', 'visit')
+      AND (article_slug = $1 OR path = $2)
+    `, [slug, `/articles/${slug}`]);
+    return Number(res.rows[0]?.count || 0);
+  }
+
+  private async ensureUniqueArticleSlug(slug: string, currentId?: string): Promise<string> {
+    let nextSlug = slug;
+    let suffix = 2;
+    while (true) {
+      const res = await query(
+        'SELECT id FROM articles WHERE slug = $1 AND ($2::varchar IS NULL OR id != $2) LIMIT 1',
+        [nextSlug, currentId || null]
+      );
+      if (res.rows.length === 0) return nextSlug;
+      nextSlug = `${slug}-${suffix}`;
+      suffix += 1;
+    }
   }
 
   // Orders
@@ -705,13 +993,15 @@ export class PostgresStore {
     const id = 'evt_' + crypto.randomBytes(6).toString('hex');
     const now = new Date().toISOString();
     await query(`
-      INSERT INTO analytics_events (id, visitor_id, product_id, product_slug, type, source, path, amount, timestamp)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+      INSERT INTO analytics_events (id, visitor_id, product_id, product_slug, article_id, article_slug, type, source, path, amount, timestamp)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
     `, [
       id,
       event.visitorId || null,
       event.productId || null,
       event.productSlug || null,
+      event.articleId || null,
+      event.articleSlug || null,
       event.type,
       event.source || 'direct',
       event.path || '/',

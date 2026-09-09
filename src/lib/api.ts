@@ -1,5 +1,7 @@
 import {
   Product,
+  Article,
+  ArticleStatus,
   Order,
   OrderStatus,
   AccessPayload,
@@ -342,6 +344,24 @@ export async function fetchProductBySlug(slugOrId: string): Promise<Product> {
   return data.product;
 }
 
+export async function fetchArticles(params?: { category?: string; search?: string }): Promise<Article[]> {
+  const query = new URLSearchParams();
+  if (params?.category) query.set('category', params.category);
+  if (params?.search) query.set('search', params.search);
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  const res = await fetch(`${API_BASE}/articles${suffix}`);
+  const data = await res.json();
+  if (!data.success) throw new Error(data.message || 'Failed to fetch articles');
+  return data.articles || [];
+}
+
+export async function fetchArticleBySlug(slug: string): Promise<{ article: Article; relatedArticles: Article[] }> {
+  const res = await fetch(`${API_BASE}/articles/${slug}`);
+  const data = await res.json();
+  if (!data.success) throw new Error(data.message || 'Article not found');
+  return { article: data.article, relatedArticles: data.relatedArticles || [] };
+}
+
 export async function fetchPaymentConfig(): Promise<{
   success: boolean;
   configured: boolean;
@@ -611,6 +631,75 @@ export async function fetchAdminProducts(): Promise<Product[]> {
   return data.products || [];
 }
 
+export async function fetchAdminArticles(): Promise<Article[]> {
+  const res = await fetch(`${API_BASE}/admin/articles`, {
+    headers: getAuthHeaders()
+  });
+
+  if (res.status === 401 || res.status === 403) {
+    throw new Error('Unauthorized: Please log in as administrator');
+  }
+
+  const data = await res.json();
+  if (!data.success) throw new Error(data.message || 'Failed to fetch articles');
+  return data.articles || [];
+}
+
+export async function saveArticle(article: Partial<Article>): Promise<Article> {
+  const isEdit = Boolean(article.id);
+  const url = isEdit ? `${API_BASE}/admin/articles/${article.id}` : `${API_BASE}/admin/articles`;
+  const method = isEdit ? 'PUT' : 'POST';
+
+  const res = await fetch(url, {
+    method,
+    headers: getAuthHeaders(),
+    body: JSON.stringify(article)
+  });
+
+  if (res.status === 401 || res.status === 403) {
+    throw new Error('Unauthorized: Please log in as administrator');
+  }
+
+  const data = await res.json();
+  if (!data.success) throw new Error(data.message || data.error || 'Failed to save article');
+  return data.article;
+}
+
+async function updateArticleStatus(id: string, status: ArticleStatus): Promise<{ success: boolean; article?: Article; message?: string }> {
+  const action = status === 'published' ? 'publish' : status === 'archived' ? 'archive' : 'unpublish';
+  const res = await fetch(`${API_BASE}/admin/articles/${id}/${action}`, {
+    method: 'POST',
+    headers: getAuthHeaders()
+  });
+
+  if (res.status === 401 || res.status === 403) {
+    throw new Error('Unauthorized: Please log in as administrator');
+  }
+
+  const data = await res.json();
+  if (!data.success) throw new Error(data.message || `Failed to ${action} article`);
+  return data;
+}
+
+export const publishArticle = (id: string) => updateArticleStatus(id, 'published');
+export const unpublishArticle = (id: string) => updateArticleStatus(id, 'draft');
+export const archiveArticle = (id: string) => updateArticleStatus(id, 'archived');
+
+export async function deleteArticle(id: string): Promise<boolean> {
+  const res = await fetch(`${API_BASE}/admin/articles/${id}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders()
+  });
+
+  if (res.status === 401 || res.status === 403) {
+    throw new Error('Unauthorized: Please log in as administrator');
+  }
+
+  const data = await res.json();
+  if (!data.success) throw new Error(data.message || 'Failed to delete article');
+  return Boolean(data.success);
+}
+
 export async function archiveProduct(id: string): Promise<{ success: boolean; product?: Product; message?: string }> {
   const res = await fetch(`${API_BASE}/admin/products/${id}/archive`, {
     method: 'POST',
@@ -845,4 +934,3 @@ export async function fetchAdminCustomerById(id: string): Promise<AdminCustomer>
   if (!data.success) throw new Error(data.message || 'Failed to load customer details');
   return data.customer;
 }
-

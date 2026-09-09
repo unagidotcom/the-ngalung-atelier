@@ -4,6 +4,8 @@ import crypto from 'crypto';
 import {
   Product,
   ProductStatus,
+  Article,
+  ArticleStatus,
   Order,
   OrderStatus,
   AnalyticsEvent,
@@ -36,6 +38,7 @@ export interface WebhookEventRecord {
 
 export interface DatabaseSchema {
   products: Product[];
+  articles?: Article[];
   orders: Order[];
   events: AnalyticsEvent[];
   settings: StoreSettings;
@@ -103,6 +106,9 @@ class DataStore {
           if (!parsed.webhookEvents) {
             parsed.webhookEvents = [];
           }
+          if (!parsed.articles) {
+            parsed.articles = [];
+          }
           return parsed;
         }
       }
@@ -113,6 +119,7 @@ class DataStore {
     const { orders, events } = generateInitialOrdersAndEvents(INITIAL_PRODUCTS);
     const initialDb: DatabaseSchema = {
       products: INITIAL_PRODUCTS,
+      articles: [],
       orders: orders,
       events: events,
       settings: INITIAL_SETTINGS,
@@ -314,6 +321,185 @@ class DataStore {
     this.data.products = [...INITIAL_PRODUCTS];
     this.saveData(this.data);
     return this.data.products;
+  }
+
+  // Articles
+  getArticles(includePrivate = false): Article[] {
+    const articles = this.data.articles || [];
+    const visible = includePrivate ? articles : articles.filter(a => a.status === 'published');
+    return [...visible].sort((a, b) => {
+      const left = new Date(b.publishedAt || b.updatedAt || b.createdAt).getTime();
+      const right = new Date(a.publishedAt || a.updatedAt || a.createdAt).getTime();
+      return left - right;
+    }).map(article => ({
+      ...article,
+      views: this.getArticleViews(article.slug)
+    }));
+  }
+
+  getArticleBySlug(slug: string, includePrivate = false): Article | undefined {
+    const article = (this.data.articles || []).find(a => a.slug === slug);
+    if (!article) return undefined;
+    if (!includePrivate && article.status !== 'published') return undefined;
+    return {
+      ...article,
+      views: this.getArticleViews(article.slug)
+    };
+  }
+
+  getArticleById(id: string): Article | undefined {
+    const article = (this.data.articles || []).find(a => a.id === id);
+    if (!article) return undefined;
+    return {
+      ...article,
+      views: this.getArticleViews(article.slug)
+    };
+  }
+
+  saveArticle(articleData: Partial<Article>): Article {
+    if (!this.data.articles) {
+      this.data.articles = [];
+    }
+
+    const now = new Date().toISOString();
+    const status: ArticleStatus = articleData.status || 'draft';
+    const baseSlug = this.normalizeArticleSlug(articleData.slug || articleData.title || 'untitled-article');
+    const slug = this.ensureUniqueArticleSlug(baseSlug, articleData.id);
+    const tags = Array.isArray(articleData.tags)
+      ? articleData.tags.map(t => String(t).trim()).filter(Boolean)
+      : [];
+    const secondaryKeywords = Array.isArray(articleData.secondaryKeywords)
+      ? articleData.secondaryKeywords.map(t => String(t).trim()).filter(Boolean)
+      : [];
+
+    if (articleData.id) {
+      const index = this.data.articles.findIndex(a => a.id === articleData.id);
+      if (index !== -1) {
+        const existing = this.data.articles[index];
+        const shouldSetPublishedAt = status === 'published' && !existing.publishedAt;
+        const updated: Article = {
+          ...existing,
+          ...articleData,
+          slug,
+          tags,
+          secondaryKeywords,
+          status,
+          publishedAt: shouldSetPublishedAt ? now : (status === 'published' ? articleData.publishedAt || existing.publishedAt : articleData.publishedAt),
+          updatedAt: now
+        } as Article;
+        this.data.articles[index] = updated;
+        this.saveData(this.data);
+        return updated;
+      }
+    }
+
+    const article: Article = {
+      id: 'art_' + crypto.randomBytes(8).toString('hex'),
+      title: articleData.title || 'Untitled Article',
+      slug,
+      excerpt: articleData.excerpt || '',
+      content: articleData.content || '',
+      author: articleData.author || 'Ng Kharinghor',
+      category: articleData.category || 'Digital Business',
+      tags,
+      featuredImage: articleData.featuredImage || '',
+      featuredImageAlt: articleData.featuredImageAlt || '',
+      primaryKeyword: articleData.primaryKeyword || '',
+      secondaryKeywords,
+      seoTitle: articleData.seoTitle || articleData.title || 'Untitled Article',
+      metaDescription: articleData.metaDescription || articleData.excerpt || '',
+      canonicalUrl: articleData.canonicalUrl || '',
+      ogTitle: articleData.ogTitle || articleData.seoTitle || articleData.title || 'Untitled Article',
+      ogDescription: articleData.ogDescription || articleData.metaDescription || articleData.excerpt || '',
+      ogImage: articleData.ogImage || articleData.featuredImage || '',
+      socialShareTitle: articleData.socialShareTitle || articleData.ogTitle || articleData.seoTitle || articleData.title || '',
+      socialShareDescription: articleData.socialShareDescription || articleData.ogDescription || articleData.metaDescription || articleData.excerpt || '',
+      socialShareImage: articleData.socialShareImage || articleData.ogImage || articleData.featuredImage || '',
+      status,
+      publishedAt: status === 'published' ? (articleData.publishedAt || now) : undefined,
+      createdAt: now,
+      updatedAt: now,
+      bookCta: articleData.bookCta
+    };
+
+    this.data.articles.unshift(article);
+    this.saveData(this.data);
+    return article;
+  }
+
+  publishArticle(idOrSlug: string): { success: boolean; article?: Article; message?: string } {
+    const article = (this.data.articles || []).find(a => a.id === idOrSlug || a.slug === idOrSlug);
+    if (!article) return { success: false, message: 'Article not found' };
+    article.status = 'published';
+    article.publishedAt = article.publishedAt || new Date().toISOString();
+    article.updatedAt = new Date().toISOString();
+    this.saveData(this.data);
+    return { success: true, article, message: 'Article published' };
+  }
+
+  unpublishArticle(idOrSlug: string): { success: boolean; article?: Article; message?: string } {
+    const article = (this.data.articles || []).find(a => a.id === idOrSlug || a.slug === idOrSlug);
+    if (!article) return { success: false, message: 'Article not found' };
+    article.status = 'draft';
+    article.updatedAt = new Date().toISOString();
+    this.saveData(this.data);
+    return { success: true, article, message: 'Article moved to draft' };
+  }
+
+  archiveArticle(idOrSlug: string): { success: boolean; article?: Article; message?: string } {
+    const article = (this.data.articles || []).find(a => a.id === idOrSlug || a.slug === idOrSlug);
+    if (!article) return { success: false, message: 'Article not found' };
+    article.status = 'archived';
+    article.updatedAt = new Date().toISOString();
+    this.saveData(this.data);
+    return { success: true, article, message: 'Article archived' };
+  }
+
+  deleteArticle(idOrSlug: string): { success: boolean; message?: string } {
+    const before = (this.data.articles || []).length;
+    this.data.articles = (this.data.articles || []).filter(a => a.id !== idOrSlug && a.slug !== idOrSlug);
+    if (this.data.articles.length === before) {
+      return { success: false, message: 'Article not found' };
+    }
+    this.saveData(this.data);
+    return { success: true, message: 'Article deleted' };
+  }
+
+  getRelatedArticles(article: Article, limit = 3): Article[] {
+    const tags = new Set((article.tags || []).map(t => t.toLowerCase()));
+    return this.getArticles(false)
+      .filter(candidate => candidate.id !== article.id)
+      .map(candidate => {
+        const tagMatches = (candidate.tags || []).filter(t => tags.has(t.toLowerCase())).length;
+        const categoryMatch = candidate.category === article.category ? 2 : 0;
+        return { article: candidate, score: tagMatches + categoryMatch };
+      })
+      .filter(item => item.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit)
+      .map(item => item.article);
+  }
+
+  getArticleViews(slug: string): number {
+    return this.data.events.filter(e => e.path === `/articles/${slug}` || e.articleSlug === slug).length;
+  }
+
+  private normalizeArticleSlug(value: string): string {
+    return value
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '') || 'untitled-article';
+  }
+
+  private ensureUniqueArticleSlug(slug: string, currentId?: string): string {
+    let nextSlug = slug;
+    let suffix = 2;
+    while ((this.data.articles || []).some(a => a.slug === nextSlug && a.id !== currentId)) {
+      nextSlug = `${slug}-${suffix}`;
+      suffix += 1;
+    }
+    return nextSlug;
   }
 
   // Orders

@@ -1,0 +1,542 @@
+import React, { useMemo, useRef, useState } from 'react';
+import {
+  Archive,
+  BookOpen,
+  Check,
+  Edit,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  Image,
+  Plus,
+  RefreshCw,
+  Search,
+  Trash2,
+  X
+} from 'lucide-react';
+import { Article, ArticleStatus } from '../../types';
+import {
+  archiveArticle,
+  deleteArticle,
+  publishArticle,
+  saveArticle,
+  unpublishArticle,
+  uploadCoverImage
+} from '../../lib/api';
+import { calculateReadingTime, createArticleSlug, renderArticleMarkdown } from '../../lib/articleMarkdown';
+
+interface ArticleManagementProps {
+  articles: Article[];
+  onRefreshArticles: () => void;
+  onPreviewPublicArticle: (slug: string) => void;
+}
+
+const categoryOptions = [
+  'Client Acquisition',
+  'Freelancing',
+  'Performance Marketing',
+  'Artificial Intelligence',
+  'Digital Business',
+  'Business Growth'
+];
+
+const firstArticleDraft: Partial<Article> = {
+  title: 'Client Acquisition for Freelancers: A Complete Guide to Getting Consistent Clients',
+  slug: 'client-acquisition-for-freelancers',
+  excerpt: '',
+  content: '',
+  author: 'Ng Kharinghor',
+  category: 'Client Acquisition',
+  tags: ['client acquisition', 'freelancing'],
+  featuredImage: '',
+  featuredImageAlt: '',
+  primaryKeyword: 'client acquisition for freelancers',
+  secondaryKeywords: [],
+  seoTitle: 'Client Acquisition for Freelancers: Complete Guide (2026)',
+  metaDescription: 'Learn how to build a client acquisition system as a freelancer using positioning, prospecting, outreach, referrals, discovery calls, proposals and follow-ups.',
+  canonicalUrl: '',
+  ogTitle: 'Client Acquisition for Freelancers: Complete Guide (2026)',
+  ogDescription: 'Learn how to build a client acquisition system as a freelancer using positioning, prospecting, outreach, referrals, discovery calls, proposals and follow-ups.',
+  ogImage: '',
+  socialShareTitle: 'Client Acquisition for Freelancers: Complete Guide (2026)',
+  socialShareDescription: 'Learn how to build a client acquisition system as a freelancer using positioning, prospecting, outreach, referrals, discovery calls, proposals and follow-ups.',
+  socialShareImage: '',
+  status: 'draft',
+  bookCta: {
+    enabled: false,
+    coverImage: '',
+    title: '',
+    author: 'Ng Kharinghor',
+    description: '',
+    amazonUrl: '',
+    googlePlayUrl: ''
+  }
+};
+
+function formatDate(value?: string) {
+  if (!value) return '-';
+  return new Date(value).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function splitCommaList(value?: string | string[]) {
+  if (Array.isArray(value)) return value;
+  return (value || '').split(',').map(item => item.trim()).filter(Boolean);
+}
+
+function statusLabel(article: Article): ArticleStatus {
+  return article.status || 'draft';
+}
+
+export const ArticleManagement: React.FC<ArticleManagementProps> = ({
+  articles,
+  onRefreshArticles,
+  onPreviewPublicArticle
+}) => {
+  const [filterStatus, setFilterStatus] = useState<'ALL' | ArticleStatus>('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [editingArticle, setEditingArticle] = useState<Partial<Article> | null>(null);
+  const [previewArticle, setPreviewArticle] = useState<Partial<Article> | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [processingId, setProcessingId] = useState<string | null>(null);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const imageInputRef = useRef<HTMLInputElement>(null);
+
+  const filteredArticles = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return articles.filter(article => {
+      const matchesStatus = filterStatus === 'ALL' || statusLabel(article) === filterStatus;
+      const matchesSearch = !q ||
+        article.title.toLowerCase().includes(q) ||
+        article.slug.toLowerCase().includes(q) ||
+        article.category.toLowerCase().includes(q) ||
+        (article.tags || []).some(tag => tag.toLowerCase().includes(q));
+      return matchesStatus && matchesSearch;
+    });
+  }, [articles, filterStatus, searchQuery]);
+
+  const showMessage = (value: string) => {
+    setMessage(value);
+    setError('');
+    setTimeout(() => setMessage(''), 4000);
+  };
+
+  const showError = (value: string) => {
+    setError(value);
+    setTimeout(() => setError(''), 5000);
+  };
+
+  const updateEditingArticle = (patch: Partial<Article>) => {
+    setEditingArticle(current => current ? { ...current, ...patch } : current);
+  };
+
+  const handleNewArticle = () => {
+    setEditingArticle({ ...firstArticleDraft });
+    setError('');
+  };
+
+  const handleUploadFeaturedImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const uploaded = await uploadCoverImage(file);
+      updateEditingArticle({
+        featuredImage: uploaded.url,
+        ogImage: uploaded.url,
+        socialShareImage: uploaded.url
+      });
+      showMessage('Featured image uploaded.');
+    } catch (err: any) {
+      showError(err.message || 'Failed to upload image');
+    } finally {
+      setUploading(false);
+      if (imageInputRef.current) imageInputRef.current.value = '';
+    }
+  };
+
+  const handleSave = async (status?: ArticleStatus) => {
+    if (!editingArticle?.title?.trim()) {
+      showError('Article title is required.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const nextArticle: Partial<Article> = {
+        ...editingArticle,
+        status: status || editingArticle.status || 'draft',
+        slug: createArticleSlug(editingArticle.slug || editingArticle.title || ''),
+        tags: splitCommaList(editingArticle.tags),
+        secondaryKeywords: splitCommaList(editingArticle.secondaryKeywords),
+        ogTitle: editingArticle.ogTitle || editingArticle.seoTitle || editingArticle.title,
+        ogDescription: editingArticle.ogDescription || editingArticle.metaDescription || editingArticle.excerpt,
+        ogImage: editingArticle.ogImage || editingArticle.featuredImage,
+        socialShareTitle: editingArticle.socialShareTitle || editingArticle.ogTitle || editingArticle.seoTitle || editingArticle.title,
+        socialShareDescription: editingArticle.socialShareDescription || editingArticle.ogDescription || editingArticle.metaDescription || editingArticle.excerpt,
+        socialShareImage: editingArticle.socialShareImage || editingArticle.ogImage || editingArticle.featuredImage
+      };
+      const saved = await saveArticle(nextArticle);
+      setEditingArticle(saved);
+      onRefreshArticles();
+      showMessage(status === 'published' ? 'Article published.' : 'Article saved.');
+    } catch (err: any) {
+      showError(err.message || 'Failed to save article');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleStatusAction = async (article: Article, status: ArticleStatus) => {
+    setProcessingId(article.id);
+    try {
+      if (status === 'published') await publishArticle(article.id);
+      else if (status === 'archived') await archiveArticle(article.id);
+      else await unpublishArticle(article.id);
+      showMessage(status === 'published' ? 'Article published.' : status === 'archived' ? 'Article archived.' : 'Article moved to draft.');
+      onRefreshArticles();
+    } catch (err: any) {
+      showError(err.message || 'Failed to update article');
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleDelete = async (article: Article) => {
+    if (!window.confirm(`Delete "${article.title}" permanently?`)) return;
+    setProcessingId(article.id);
+    try {
+      await deleteArticle(article.id);
+      showMessage('Article deleted.');
+      onRefreshArticles();
+    } catch (err: any) {
+      showError(err.message || 'Failed to delete article');
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const seoChecklist = editingArticle ? [
+    { label: 'Primary keyword added', done: Boolean(editingArticle.primaryKeyword?.trim()) },
+    { label: 'SEO title added', done: Boolean(editingArticle.seoTitle?.trim()) },
+    { label: 'Meta description added', done: Boolean(editingArticle.metaDescription?.trim()) },
+    { label: 'URL slug created', done: Boolean(editingArticle.slug?.trim()) },
+    { label: 'H1 present', done: Boolean(editingArticle.title?.trim()) },
+    { label: 'Featured image has alt text', done: Boolean(editingArticle.featuredImage && editingArticle.featuredImageAlt?.trim()) },
+    { label: 'Article has internal links', done: Boolean(editingArticle.content?.includes('](/') || editingArticle.content?.includes('](')) },
+    { label: 'Article has sufficient content', done: (editingArticle.content || '').trim().split(/\s+/).filter(Boolean).length >= 600 }
+  ] : [];
+
+  return (
+    <div className="space-y-6 text-[#17181F]">
+      {message && (
+        <div className="flex items-center justify-between rounded-2xl bg-[#1F8F5F] px-4 py-3 text-xs font-bold text-white">
+          <span className="flex items-center gap-2"><Check className="h-4 w-4" /> {message}</span>
+          <button type="button" onClick={() => setMessage('')}><X className="h-3.5 w-3.5" /></button>
+        </div>
+      )}
+      {error && (
+        <div className="flex items-center justify-between rounded-2xl bg-red-600 px-4 py-3 text-xs font-bold text-white">
+          <span>{error}</span>
+          <button type="button" onClick={() => setError('')}><X className="h-3.5 w-3.5" /></button>
+        </div>
+      )}
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="font-display text-xl font-bold text-[#17181F]">Articles & SEO Library</h2>
+          <p className="text-xs text-[#6E6C63]">Manage article drafts, metadata, publishing, and book discovery CTAs.</p>
+        </div>
+        <button
+          type="button"
+          onClick={handleNewArticle}
+          className="inline-flex items-center gap-1.5 rounded-full bg-[#17181F] px-4 py-2 text-xs font-bold text-[#FAF6EE] shadow-2xs hover:bg-[#31333F]"
+        >
+          <Plus className="h-4 w-4 text-[#FF5A36]" />
+          New Article
+        </button>
+      </div>
+
+      <div className="flex flex-col gap-3 rounded-2xl border border-[#E7DFCE] bg-[#FFFFFF] p-3 shadow-2xs sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex gap-1.5 overflow-x-auto">
+          {[
+            { key: 'ALL', label: `All (${articles.length})` },
+            { key: 'published', label: `Published (${articles.filter(a => a.status === 'published').length})` },
+            { key: 'draft', label: `Drafts (${articles.filter(a => a.status === 'draft').length})` },
+            { key: 'archived', label: `Archived (${articles.filter(a => a.status === 'archived').length})` }
+          ].map(tab => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setFilterStatus(tab.key as any)}
+              className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-bold ${
+                filterStatus === tab.key
+                  ? 'bg-[#17181F] text-[#FAF6EE]'
+                  : 'text-[#6E6C63] hover:bg-[#FAF6EE] hover:text-[#17181F]'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        <div className="relative w-full sm:w-72">
+          <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#A6A296]" />
+          <input
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search articles..."
+            className="w-full rounded-full border border-[#E7DFCE] bg-[#FAF6EE] py-1.5 pl-9 pr-3 text-xs outline-none focus:bg-white"
+          />
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-3xl border border-[#E7DFCE] bg-[#FFFFFF] shadow-2xs">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[860px] text-left text-xs">
+            <thead>
+              <tr className="border-b border-[#E7DFCE] bg-[#FAF6EE] font-mono text-[11px] font-bold uppercase tracking-wider text-[#6E6C63]">
+                <th className="p-4">Title</th>
+                <th className="p-4">Category</th>
+                <th className="p-4">Status</th>
+                <th className="p-4">Published</th>
+                <th className="p-4">Updated</th>
+                <th className="p-4">Views</th>
+                <th className="p-4">SEO</th>
+                <th className="p-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#E7DFCE]">
+              {filteredArticles.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="p-8 text-center text-[#6E6C63]">No articles found.</td>
+                </tr>
+              ) : filteredArticles.map(article => {
+                const seoReady = Boolean(article.seoTitle && article.metaDescription && article.slug && article.featuredImageAlt);
+                return (
+                  <tr key={article.id} className="hover:bg-[#FAF6EE]/50">
+                    <td className="p-4">
+                      <div className="font-bold text-[#17181F]">{article.title}</div>
+                      <div className="font-mono text-[11px] text-[#A6A296]">/articles/{article.slug}</div>
+                    </td>
+                    <td className="p-4">
+                      <span className="rounded-full bg-[#F3EDE0] px-2.5 py-0.5 text-[10px] font-bold">{article.category}</span>
+                    </td>
+                    <td className="p-4">
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                        article.status === 'published'
+                          ? 'bg-[#1F8F5F]/15 text-[#1F8F5F]'
+                          : article.status === 'archived'
+                          ? 'bg-slate-100 text-slate-700'
+                          : 'bg-amber-100 text-amber-800'
+                      }`}>
+                        {article.status === 'published' ? <Eye className="h-3 w-3" /> : article.status === 'archived' ? <Archive className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+                        {article.status}
+                      </span>
+                    </td>
+                    <td className="p-4 font-mono text-[11px] text-[#6E6C63]">{formatDate(article.publishedAt)}</td>
+                    <td className="p-4 font-mono text-[11px] text-[#6E6C63]">{formatDate(article.updatedAt)}</td>
+                    <td className="p-4 font-mono font-bold text-[#17181F]">{article.views || 0}</td>
+                    <td className="p-4">
+                      <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${seoReady ? 'bg-[#1F8F5F]/15 text-[#1F8F5F]' : 'bg-amber-100 text-amber-800'}`}>
+                        {seoReady ? 'Ready' : 'Needs Review'}
+                      </span>
+                    </td>
+                    <td className="p-4">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button type="button" onClick={() => setPreviewArticle(article)} title="Preview" className="rounded-full p-1.5 text-[#6E6C63] hover:bg-[#F3EDE0]"><Eye className="h-4 w-4" /></button>
+                        {article.status === 'published' && (
+                          <button type="button" onClick={() => onPreviewPublicArticle(article.slug)} title="Open public article" className="rounded-full p-1.5 text-[#6E6C63] hover:bg-[#F3EDE0]"><ExternalLink className="h-4 w-4" /></button>
+                        )}
+                        <button type="button" onClick={() => setEditingArticle({ ...article })} title="Edit" className="rounded-full p-1.5 text-[#6E6C63] hover:bg-[#F3EDE0]"><Edit className="h-4 w-4" /></button>
+                        {article.status === 'published' ? (
+                          <button type="button" disabled={processingId === article.id} onClick={() => handleStatusAction(article, 'draft')} className="rounded-full px-2.5 py-1 text-[10px] font-bold text-stone-600 hover:bg-[#F3EDE0]">Unpublish</button>
+                        ) : (
+                          <button type="button" disabled={processingId === article.id} onClick={() => handleStatusAction(article, 'published')} className="rounded-full px-2.5 py-1 text-[10px] font-bold text-[#1F8F5F] hover:bg-[#1F8F5F]/10">Publish</button>
+                        )}
+                        {article.status !== 'archived' && (
+                          <button type="button" disabled={processingId === article.id} onClick={() => handleStatusAction(article, 'archived')} title="Archive" className="rounded-full p-1.5 text-slate-600 hover:bg-slate-100"><Archive className="h-4 w-4" /></button>
+                        )}
+                        <button type="button" onClick={() => handleDelete(article)} title="Delete" className="rounded-full p-1.5 text-red-600 hover:bg-red-50"><Trash2 className="h-4 w-4" /></button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {editingArticle && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
+          <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/70 p-5">
+              <div>
+                <h3 className="font-display text-lg font-bold text-slate-900">{editingArticle.id ? 'Edit Article' : 'New Article'}</h3>
+                <p className="text-xs text-slate-500">{editingArticle.status || 'draft'} · {calculateReadingTime(editingArticle.content || editingArticle.excerpt || '')} min read</p>
+              </div>
+              <button type="button" onClick={() => setEditingArticle(null)} className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="grid flex-1 overflow-y-auto lg:grid-cols-[1fr_340px]">
+              <div className="space-y-5 p-5 text-xs">
+                <section className="space-y-4">
+                  <h4 className="font-mono text-[11px] font-bold uppercase tracking-wider text-[#FF5A36]">Article Information</h4>
+                  <div>
+                    <label className="mb-1 block font-bold text-slate-700">Article Title *</label>
+                    <input value={editingArticle.title || ''} onChange={e => updateEditingArticle({ title: e.target.value, slug: createArticleSlug(e.target.value) })} className="w-full rounded-xl border border-slate-300 px-3.5 py-2 outline-none focus:ring-2 focus:ring-emerald-500" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block font-bold text-slate-700">Subtitle / Excerpt</label>
+                    <textarea rows={3} value={editingArticle.excerpt || ''} onChange={e => updateEditingArticle({ excerpt: e.target.value })} className="w-full rounded-xl border border-slate-300 px-3.5 py-2 outline-none focus:ring-2 focus:ring-emerald-500" />
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block font-bold text-slate-700">Author</label>
+                      <input value={editingArticle.author || ''} onChange={e => updateEditingArticle({ author: e.target.value })} className="w-full rounded-xl border border-slate-300 px-3.5 py-2 outline-none focus:ring-2 focus:ring-emerald-500" />
+                    </div>
+                    <div>
+                      <label className="mb-1 block font-bold text-slate-700">Category</label>
+                      <select value={editingArticle.category || 'Digital Business'} onChange={e => updateEditingArticle({ category: e.target.value })} className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 outline-none focus:ring-2 focus:ring-emerald-500">
+                        {categoryOptions.map(category => <option key={category} value={category}>{category}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="mb-1 block font-bold text-slate-700">Tags</label>
+                    <input value={(editingArticle.tags || []).join(', ')} onChange={e => updateEditingArticle({ tags: splitCommaList(e.target.value) })} className="w-full rounded-xl border border-slate-300 px-3.5 py-2 outline-none focus:ring-2 focus:ring-emerald-500" />
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <label className="mb-2 block font-bold text-slate-700">Featured Image</label>
+                    <div className="flex flex-wrap items-center gap-3">
+                      {editingArticle.featuredImage ? <img src={editingArticle.featuredImage} alt="" className="h-16 w-24 rounded-xl border border-slate-200 object-cover" /> : <div className="flex h-16 w-24 items-center justify-center rounded-xl border border-dashed border-slate-300 text-slate-400"><Image className="h-5 w-5" /></div>}
+                      <input ref={imageInputRef} type="file" accept="image/*" onChange={handleUploadFeaturedImage} className="text-xs file:mr-3 file:rounded-xl file:border-0 file:bg-slate-900 file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-white" />
+                      {uploading && <RefreshCw className="h-4 w-4 animate-spin text-slate-600" />}
+                    </div>
+                    <input value={editingArticle.featuredImage || ''} onChange={e => updateEditingArticle({ featuredImage: e.target.value })} placeholder="Image URL" className="mt-3 w-full rounded-xl border border-slate-300 px-3.5 py-2 outline-none focus:ring-2 focus:ring-emerald-500" />
+                    <input value={editingArticle.featuredImageAlt || ''} onChange={e => updateEditingArticle({ featuredImageAlt: e.target.value })} placeholder="Featured image alt text" className="mt-3 w-full rounded-xl border border-slate-300 px-3.5 py-2 outline-none focus:ring-2 focus:ring-emerald-500" />
+                  </div>
+                </section>
+
+                <section className="space-y-3">
+                  <h4 className="font-mono text-[11px] font-bold uppercase tracking-wider text-[#FF5A36]">Content</h4>
+                  <textarea
+                    rows={18}
+                    value={editingArticle.content || ''}
+                    onChange={e => updateEditingArticle({ content: e.target.value })}
+                    className="w-full rounded-2xl border border-slate-300 px-4 py-3 font-mono text-[12px] leading-relaxed outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="Paste the final article here."
+                  />
+                </section>
+
+                <section className="space-y-3 rounded-2xl border border-[#E7DFCE] bg-[#FAF6EE] p-4">
+                  <h4 className="font-mono text-[11px] font-bold uppercase tracking-wider text-[#FF5A36]">Book CTA</h4>
+                  <label className="flex items-center gap-2 font-bold text-slate-700">
+                    <input type="checkbox" checked={Boolean(editingArticle.bookCta?.enabled)} onChange={e => updateEditingArticle({ bookCta: { ...(editingArticle.bookCta || firstArticleDraft.bookCta!), enabled: e.target.checked } })} />
+                    Enable book promotion
+                  </label>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <input value={editingArticle.bookCta?.title || ''} onChange={e => updateEditingArticle({ bookCta: { ...(editingArticle.bookCta || firstArticleDraft.bookCta!), title: e.target.value } })} placeholder="Book title" className="rounded-xl border border-slate-300 px-3.5 py-2" />
+                    <input value={editingArticle.bookCta?.author || ''} onChange={e => updateEditingArticle({ bookCta: { ...(editingArticle.bookCta || firstArticleDraft.bookCta!), author: e.target.value } })} placeholder="Author" className="rounded-xl border border-slate-300 px-3.5 py-2" />
+                    <input value={editingArticle.bookCta?.coverImage || ''} onChange={e => updateEditingArticle({ bookCta: { ...(editingArticle.bookCta || firstArticleDraft.bookCta!), coverImage: e.target.value } })} placeholder="Book cover URL" className="rounded-xl border border-slate-300 px-3.5 py-2" />
+                    <input value={editingArticle.bookCta?.amazonUrl || ''} onChange={e => updateEditingArticle({ bookCta: { ...(editingArticle.bookCta || firstArticleDraft.bookCta!), amazonUrl: e.target.value } })} placeholder="Amazon URL" className="rounded-xl border border-slate-300 px-3.5 py-2" />
+                    <input value={editingArticle.bookCta?.googlePlayUrl || ''} onChange={e => updateEditingArticle({ bookCta: { ...(editingArticle.bookCta || firstArticleDraft.bookCta!), googlePlayUrl: e.target.value } })} placeholder="Google Play Books URL" className="rounded-xl border border-slate-300 px-3.5 py-2 sm:col-span-2" />
+                    <textarea rows={2} value={editingArticle.bookCta?.description || ''} onChange={e => updateEditingArticle({ bookCta: { ...(editingArticle.bookCta || firstArticleDraft.bookCta!), description: e.target.value } })} placeholder="Short description" className="rounded-xl border border-slate-300 px-3.5 py-2 sm:col-span-2" />
+                  </div>
+                </section>
+              </div>
+
+              <aside className="space-y-5 border-t border-slate-100 bg-slate-50 p-5 text-xs lg:border-l lg:border-t-0">
+                <section className="space-y-3">
+                  <h4 className="font-mono text-[11px] font-bold uppercase tracking-wider text-[#FF5A36]">SEO Panel</h4>
+                  <div>
+                    <label className="mb-1 block font-bold text-slate-700">Primary Keyword</label>
+                    <input value={editingArticle.primaryKeyword || ''} onChange={e => updateEditingArticle({ primaryKeyword: e.target.value })} className="w-full rounded-xl border border-slate-300 px-3.5 py-2" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block font-bold text-slate-700">Secondary Keywords</label>
+                    <input value={(editingArticle.secondaryKeywords || []).join(', ')} onChange={e => updateEditingArticle({ secondaryKeywords: splitCommaList(e.target.value) })} className="w-full rounded-xl border border-slate-300 px-3.5 py-2" />
+                  </div>
+                  <div>
+                    <div className="mb-1 flex justify-between font-bold text-slate-700"><label>SEO Title</label><span className="font-mono text-[10px] text-slate-400">{(editingArticle.seoTitle || '').length}/60</span></div>
+                    <input value={editingArticle.seoTitle || ''} onChange={e => updateEditingArticle({ seoTitle: e.target.value })} className="w-full rounded-xl border border-slate-300 px-3.5 py-2" />
+                  </div>
+                  <div>
+                    <div className="mb-1 flex justify-between font-bold text-slate-700"><label>Meta Description</label><span className="font-mono text-[10px] text-slate-400">{(editingArticle.metaDescription || '').length}/160</span></div>
+                    <textarea rows={3} value={editingArticle.metaDescription || ''} onChange={e => updateEditingArticle({ metaDescription: e.target.value })} className="w-full rounded-xl border border-slate-300 px-3.5 py-2" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block font-bold text-slate-700">URL Slug</label>
+                    <input value={editingArticle.slug || ''} onChange={e => updateEditingArticle({ slug: createArticleSlug(e.target.value) })} className="w-full rounded-xl border border-slate-300 px-3.5 py-2 font-mono" />
+                  </div>
+                  <input value={editingArticle.canonicalUrl || ''} onChange={e => updateEditingArticle({ canonicalUrl: e.target.value })} placeholder="Canonical URL" className="w-full rounded-xl border border-slate-300 px-3.5 py-2" />
+                  <input value={editingArticle.socialShareTitle || ''} onChange={e => updateEditingArticle({ socialShareTitle: e.target.value })} placeholder="Social share title" className="w-full rounded-xl border border-slate-300 px-3.5 py-2" />
+                  <textarea rows={2} value={editingArticle.socialShareDescription || ''} onChange={e => updateEditingArticle({ socialShareDescription: e.target.value })} placeholder="Social share description" className="w-full rounded-xl border border-slate-300 px-3.5 py-2" />
+                  <input value={editingArticle.socialShareImage || ''} onChange={e => updateEditingArticle({ socialShareImage: e.target.value })} placeholder="Social share image" className="w-full rounded-xl border border-slate-300 px-3.5 py-2" />
+                </section>
+
+                <section className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <h4 className="font-bold text-slate-900">SEO checklist</h4>
+                  <div className="mt-3 space-y-2">
+                    {seoChecklist.map(item => (
+                      <div key={item.label} className="flex items-center gap-2 text-[11px] text-slate-600">
+                        <span className={`flex h-4 w-4 items-center justify-center rounded-full ${item.done ? 'bg-[#1F8F5F] text-white' : 'bg-slate-200 text-slate-400'}`}>
+                          <Check className="h-3 w-3" />
+                        </span>
+                        {item.label}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              </aside>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 bg-white p-4 text-xs">
+              <button type="button" onClick={() => setPreviewArticle(editingArticle)} className="inline-flex items-center gap-1.5 rounded-full border border-[#E7DFCE] px-4 py-2 font-bold text-[#17181F]">
+                <Eye className="h-3.5 w-3.5" />
+                Preview
+              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button type="button" onClick={() => setEditingArticle(null)} className="rounded-full border border-slate-200 px-4 py-2 font-bold text-slate-600">Cancel</button>
+                <button type="button" disabled={saving || uploading} onClick={() => handleSave('draft')} className="rounded-full border border-[#E7DFCE] bg-[#FAF6EE] px-4 py-2 font-bold text-[#17181F] disabled:opacity-50">
+                  Save Draft
+                </button>
+                <button type="button" disabled={saving || uploading} onClick={() => handleSave('published')} className="inline-flex items-center gap-1.5 rounded-full bg-[#17181F] px-5 py-2 font-bold text-[#FAF6EE] disabled:opacity-50">
+                  {saving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <BookOpen className="h-3.5 w-3.5 text-[#FF5A36]" />}
+                  Publish / Update
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {previewArticle && (
+        <div className="fixed inset-0 z-60 overflow-y-auto bg-slate-900/70 p-4 backdrop-blur-xs">
+          <div className="mx-auto my-6 max-w-3xl rounded-3xl border border-[#E7DFCE] bg-[#FAF6EE] p-5 shadow-2xl">
+            <div className="mb-5 flex items-center justify-between border-b border-[#E7DFCE] pb-4">
+              <div>
+                <p className="font-mono text-[11px] font-bold uppercase tracking-wider text-[#FF5A36]">Preview</p>
+                <h3 className="font-display text-xl font-bold text-[#17181F]">{previewArticle.title}</h3>
+              </div>
+              <button type="button" onClick={() => setPreviewArticle(null)} className="flex h-8 w-8 items-center justify-center rounded-full border border-[#E7DFCE] bg-white">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <article>
+              <p className="font-mono text-[11px] font-bold uppercase tracking-wider text-[#FF5A36]">{previewArticle.category}</p>
+              <h1 className="mt-2 font-display text-4xl font-bold leading-tight tracking-tight text-[#17181F]">{previewArticle.title}</h1>
+              <p className="mt-4 text-base leading-relaxed text-[#6E6C63]">{previewArticle.excerpt}</p>
+              {previewArticle.featuredImage && <img src={previewArticle.featuredImage} alt={previewArticle.featuredImageAlt || ''} className="mt-6 aspect-16/10 w-full rounded-3xl border border-[#E7DFCE] object-cover" />}
+              <section className="article-prose mt-8" dangerouslySetInnerHTML={{ __html: renderArticleMarkdown(previewArticle.content || '') || '<p>No content yet.</p>' }} />
+            </article>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default ArticleManagement;

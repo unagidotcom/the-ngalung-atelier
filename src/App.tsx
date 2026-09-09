@@ -4,6 +4,8 @@ import { Footer } from './components/Footer';
 import { CustomerWelcome } from './components/CustomerWelcome';
 import { StorefrontHome } from './components/StorefrontHome';
 import { ProductLandingPage } from './components/ProductLandingPage';
+import { ArticleLibraryPage } from './components/ArticleLibraryPage';
+import { ArticlePage } from './components/ArticlePage';
 import { CheckoutModal } from './components/CheckoutModal';
 import { DeliveryVault } from './components/DeliveryVault';
 import { MyPurchases } from './components/MyPurchases';
@@ -142,7 +144,11 @@ export default function App() {
     }
 
     let newPath = '/';
-    if (view === 'product' && slug) {
+    if (view === 'articles') {
+      newPath = '/articles';
+    } else if (view === 'article' && slug) {
+      newPath = `/articles/${slug}`;
+    } else if (view === 'product' && slug) {
       newPath = `/p/${slug}`;
     } else if (view === 'access' && slug) {
       newPath = `/access/${slug}`;
@@ -181,6 +187,11 @@ export default function App() {
   if (currentPath.startsWith('/p/')) {
     activeView = 'product';
     activeSlug = currentPath.replace('/p/', '').split('?')[0];
+  } else if (currentPath === '/articles') {
+    activeView = 'articles';
+  } else if (currentPath.startsWith('/articles/')) {
+    activeView = 'article';
+    activeSlug = currentPath.replace('/articles/', '').split('?')[0];
   } else if (currentPath.startsWith('/access/')) {
     activeView = 'access';
     activeAccessToken = currentPath.replace('/access/', '').split('?')[0];
@@ -317,6 +328,21 @@ export default function App() {
               )
             )}
 
+            {activeView === 'articles' && (
+              <ArticleLibraryPage
+                onSelectArticle={slug => navigate('article', slug)}
+              />
+            )}
+
+            {activeView === 'article' && activeSlug && (
+              <ArticlePage
+                slug={activeSlug}
+                onNavigateHome={() => navigate('home')}
+                onNavigateArticles={() => navigate('articles')}
+                onSelectArticle={slug => navigate('article', slug)}
+              />
+            )}
+
             {/* 3. Dedicated Product Landing & Sales Page (Protected by Customer Auth) */}
             {activeView === 'product' && selectedProduct && (
               customerUser ? (
@@ -430,6 +456,7 @@ export default function App() {
               <AdminDashboard
                 onNavigateHome={() => navigate('home')}
                 onPreviewProduct={slug => navigate('product', slug)}
+                onPreviewArticle={slug => navigate('article', slug)}
               />
             )}
 

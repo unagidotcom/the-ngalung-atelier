@@ -50,6 +50,8 @@ interface TrackPayload {
   source?: string;
   productId?: string;
   productSlug?: string;
+  articleId?: string;
+  articleSlug?: string;
   amount?: number;
 }
 
@@ -73,6 +75,8 @@ export function trackEvent(payload: TrackPayload): void {
     path,
     productId: payload.productId,
     productSlug: payload.productSlug,
+    articleId: payload.articleId,
+    articleSlug: payload.articleSlug,
     amount: payload.amount
   };
 
@@ -111,6 +115,23 @@ export const analytics = {
       productSlug,
       amount,
       path: `/p/${productSlug}`
+    });
+  },
+  trackArticleView: (articleId: string, articleSlug: string) => {
+    trackEvent({
+      type: 'article_view',
+      articleId,
+      articleSlug,
+      path: `/articles/${articleSlug}`
+    });
+  },
+  trackBookCtaClick: (articleId: string, articleSlug: string, target: 'amazon' | 'google_play') => {
+    trackEvent({
+      type: 'book_cta_click',
+      articleId,
+      articleSlug,
+      source: target,
+      path: `/articles/${articleSlug}`
     });
   },
   trackCheckoutStart: (productId: string, productSlug: string, amount?: number) => {

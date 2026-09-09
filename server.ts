@@ -19,7 +19,8 @@ import { emailService } from './server/email';
 import { FileStorageService } from './server/fileStorage';
 import { getActiveStore, getDatabaseStatus, checkDatabaseConnection, isPostgresConfigured, runMigrations } from './server/db';
 import { storageService } from './server/storage';
-import { Product, StoreSettings, PublicStoreInfo, Order, OrderStatus } from './src/types';
+import { Product, StoreSettings, PublicStoreInfo, Order, OrderStatus, Article } from './src/types';
+import { calculateReadingTime, renderArticleMarkdown } from './src/lib/articleMarkdown';
 
 // Configure multer in-memory storage for safe inspection and storage delegation
 const upload = multer({
@@ -32,6 +33,102 @@ const upload = multer({
 interface CreateAppOptions {
   serveStatic?: boolean;
   runStartupChecks?: boolean;
+}
+
+function escapeHtml(value: string = ''): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function getBaseUrl(req: express.Request): string {
+  const configured = process.env.PUBLIC_APP_URL || process.env.APP_URL;
+  if (configured) return configured.replace(/\/$/, '');
+  return `${req.protocol}://${req.get('host')}`;
+}
+
+function xmlEscape(value: string = ''): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function buildArticleMeta(article: Article, baseUrl: string) {
+  const canonicalUrl = article.canonicalUrl || `${baseUrl}/articles/${article.slug}`;
+  const image = article.ogImage || article.socialShareImage || article.featuredImage;
+  return {
+    title: article.seoTitle || article.title,
+    description: article.metaDescription || article.excerpt,
+    canonicalUrl,
+    image: image ? (image.startsWith('http') ? image : `${baseUrl}${image}`) : '',
+    ogTitle: article.ogTitle || article.socialShareTitle || article.seoTitle || article.title,
+    ogDescription: article.ogDescription || article.socialShareDescription || article.metaDescription || article.excerpt
+  };
+}
+
+function articleShell(title: string, body: string, head = ''): string {
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  ${head}
+  <title>${escapeHtml(title)}</title>
+  <style>
+    body{margin:0;background:#FAF6EE;color:#17181F;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+    a{color:inherit}
+    .wrap{max-width:1120px;margin:0 auto;padding:0 24px}
+    .top{border-bottom:1px solid #E7DFCE;background:rgba(250,246,238,.96);position:sticky;top:0;z-index:5}
+    .top-inner{height:64px;display:flex;align-items:center;justify-content:space-between}
+    .brand{font-family:Georgia,serif;font-weight:800;text-decoration:none}
+    .nav{display:flex;gap:18px;font-size:12px;font-weight:700;color:#6E6C63}
+    .nav a{text-decoration:none}.nav a:hover{color:#FF5A36}
+    .hero{padding:68px 0 36px;border-bottom:1px solid #E7DFCE}
+    .eyebrow{font:700 11px ui-monospace,monospace;letter-spacing:.08em;text-transform:uppercase;color:#FF5A36}
+    h1{font-family:Georgia,serif;font-size:clamp(34px,6vw,64px);line-height:1.03;margin:12px 0 14px;letter-spacing:0}
+    .lead{max-width:720px;color:#6E6C63;font-size:16px;line-height:1.8}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:22px;padding:40px 0 74px}
+    .card{border:1px solid #E7DFCE;background:#fff;border-radius:24px;overflow:hidden;text-decoration:none;display:flex;flex-direction:column}
+    .card img{width:100%;aspect-ratio:16/10;object-fit:cover;background:#F3EDE0}
+    .card-body{padding:22px}.meta{font:700 11px ui-monospace,monospace;text-transform:uppercase;color:#FF5A36}
+    h2{font-family:Georgia,serif;font-size:22px;line-height:1.2;margin:10px 0;color:#17181F}
+    .excerpt{font-size:13px;line-height:1.7;color:#6E6C63}
+    .byline{display:flex;justify-content:space-between;gap:12px;margin-top:18px;font-size:11px;color:#A6A296}
+    .article{max-width:760px;margin:0 auto;padding:38px 24px 80px}
+    .article h1{font-size:clamp(36px,7vw,66px)}
+    .article-cover{width:100%;border-radius:24px;border:1px solid #E7DFCE;margin:28px 0;object-fit:cover;max-height:460px}
+    .article-body{font-size:17px;line-height:1.86;color:#343434}.article-body h2{font-size:30px;margin-top:42px}.article-body h3{font-size:22px;margin-top:28px}
+    .article-body p{margin:18px 0}.article-body blockquote{border-left:3px solid #FF5A36;padding-left:18px;color:#555}
+    .article-body img{max-width:100%;border-radius:18px;border:1px solid #E7DFCE}.article-body a{color:#D94A27;font-weight:700}
+    .article-body table{border-collapse:collapse;width:100%;font-size:14px}.article-table-wrap{overflow:auto}.article-body th,.article-body td{border:1px solid #E7DFCE;padding:10px;text-align:left}
+    .article-inline-cta{border:1px solid #E7DFCE;background:#fff;padding:18px;border-radius:18px;font-weight:700}
+    .empty{border:1px dashed #D8CDB4;background:#fff;border-radius:24px;padding:34px;text-align:center;color:#6E6C63;margin:36px 0 70px}
+    footer{border-top:1px solid #E7DFCE;padding:28px 0;color:#6E6C63;font-size:12px}
+    @media(max-width:720px){.nav{gap:10px;font-size:11px}.top-inner{height:auto;min-height:64px;align-items:flex-start;flex-direction:column;padding:14px 0}.hero{padding-top:42px}.wrap{padding:0 18px}.article{padding-left:18px;padding-right:18px}.article-body{font-size:16px}}
+  </style>
+</head>
+<body>${body}</body>
+</html>`;
+}
+
+function renderArticleCard(article: Article): string {
+  const date = article.publishedAt ? new Date(article.publishedAt).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' }) : 'Draft';
+  const readingTime = calculateReadingTime(article.content || article.excerpt || '');
+  return `<a class="card" href="/articles/${escapeHtml(article.slug)}">
+    ${article.featuredImage ? `<img src="${escapeHtml(article.featuredImage)}" alt="${escapeHtml(article.featuredImageAlt || article.title)}" loading="lazy" />` : ''}
+    <div class="card-body">
+      <div class="meta">${escapeHtml(article.category)}</div>
+      <h2>${escapeHtml(article.title)}</h2>
+      <p class="excerpt">${escapeHtml(article.excerpt)}</p>
+      <div class="byline"><span>${escapeHtml(article.author)}</span><span>${date} · ${readingTime} min read</span></div>
+    </div>
+  </a>`;
 }
 
 export async function createApp(options: CreateAppOptions = {}) {
@@ -269,6 +366,179 @@ export async function createApp(options: CreateAppOptions = {}) {
       res.json({ success: true, product: sanitizePublicProduct(product) });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 4. Public Articles API (published articles only)
+  app.get('/api/articles', async (req, res) => {
+    try {
+      const { category = '', search = '' } = req.query;
+      const articles = await getActiveStore().getArticles(false);
+      const normalizedCategory = String(category).trim().toLowerCase();
+      const normalizedSearch = String(search).trim().toLowerCase();
+      const filtered = articles.filter(article => {
+        const matchesCategory = !normalizedCategory || article.category.toLowerCase() === normalizedCategory;
+        const matchesSearch = !normalizedSearch ||
+          article.title.toLowerCase().includes(normalizedSearch) ||
+          article.excerpt.toLowerCase().includes(normalizedSearch) ||
+          article.category.toLowerCase().includes(normalizedSearch) ||
+          (article.tags || []).some(tag => tag.toLowerCase().includes(normalizedSearch));
+        return matchesCategory && matchesSearch;
+      });
+      res.json({ success: true, articles: filtered });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.get('/api/articles/:slug', async (req, res) => {
+    try {
+      const article = await getActiveStore().getArticleBySlug(req.params.slug, false);
+      if (!article) {
+        return res.status(404).json({ success: false, message: 'Article not found' });
+      }
+      const relatedArticles = await getActiveStore().getRelatedArticles(article, 3);
+      res.json({ success: true, article, relatedArticles });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.get('/articles', async (req, res) => {
+    try {
+      const baseUrl = getBaseUrl(req);
+      const articles = await getActiveStore().getArticles(false);
+      const head = `
+        <meta name="description" content="Practical guides on freelancing, client acquisition, marketing, AI, digital business, and building better systems." />
+        <link rel="canonical" href="${baseUrl}/articles" />
+        <meta property="og:title" content="Articles & Guides | The Ngalung Atelier" />
+        <meta property="og:description" content="Practical guides on freelancing, client acquisition, marketing, AI, digital business, and building better systems." />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content="${baseUrl}/articles" />
+        <meta name="twitter:card" content="summary_large_image" />
+      `;
+      const body = `
+        <header class="top"><div class="wrap top-inner"><a class="brand" href="/">The Ngalung Atelier</a><nav class="nav"><a href="/">Home</a><a href="/#products-catalog">Products</a><a href="/articles">Articles</a><a href="/#about-section">About</a><a href="/purchases">My Purchases</a></nav></div></header>
+        <main>
+          <section class="hero"><div class="wrap"><div class="eyebrow">Articles & Guides</div><h1>Practical systems for better digital business.</h1><p class="lead">Practical guides on freelancing, client acquisition, marketing, AI, digital business, and building better systems.</p></div></section>
+          <section class="wrap">${articles.length ? `<div class="grid">${articles.map(renderArticleCard).join('')}</div>` : '<div class="empty">No published articles yet.</div>'}</section>
+        </main>
+        <footer><div class="wrap">© ${new Date().getFullYear()} The Ngalung Atelier. Handcrafted digital products and practical guides.</div></footer>
+      `;
+      res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=300');
+      res.send(articleShell('Articles & Guides | The Ngalung Atelier', body, head));
+    } catch (err: any) {
+      res.status(500).send('Unable to load articles.');
+    }
+  });
+
+  app.get('/articles/:slug', async (req, res, next) => {
+    try {
+      const article = await getActiveStore().getArticleBySlug(req.params.slug, false);
+      if (!article) return next();
+      const baseUrl = getBaseUrl(req);
+      const meta = buildArticleMeta(article, baseUrl);
+      const relatedArticles = await getActiveStore().getRelatedArticles(article, 3);
+      const publishedDate = article.publishedAt || article.createdAt;
+      const articleSchema = {
+        '@context': 'https://schema.org',
+        '@type': 'BlogPosting',
+        headline: article.title,
+        description: meta.description,
+        author: { '@type': 'Person', name: article.author },
+        datePublished: publishedDate,
+        dateModified: article.updatedAt,
+        image: meta.image ? [meta.image] : undefined,
+        mainEntityOfPage: { '@type': 'WebPage', '@id': meta.canonicalUrl }
+      };
+      const breadcrumbSchema = {
+        '@context': 'https://schema.org',
+        '@type': 'BreadcrumbList',
+        itemListElement: [
+          { '@type': 'ListItem', position: 1, name: 'Home', item: baseUrl },
+          { '@type': 'ListItem', position: 2, name: 'Articles', item: `${baseUrl}/articles` },
+          { '@type': 'ListItem', position: 3, name: article.title, item: meta.canonicalUrl }
+        ]
+      };
+      const date = new Date(publishedDate).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' });
+      const updated = new Date(article.updatedAt).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' });
+      const head = `
+        <meta name="description" content="${escapeHtml(meta.description)}" />
+        <link rel="canonical" href="${escapeHtml(meta.canonicalUrl)}" />
+        <meta property="og:title" content="${escapeHtml(meta.ogTitle)}" />
+        <meta property="og:description" content="${escapeHtml(meta.ogDescription)}" />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content="${escapeHtml(meta.canonicalUrl)}" />
+        ${meta.image ? `<meta property="og:image" content="${escapeHtml(meta.image)}" />` : ''}
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="${escapeHtml(article.socialShareTitle || meta.ogTitle)}" />
+        <meta name="twitter:description" content="${escapeHtml(article.socialShareDescription || meta.ogDescription)}" />
+        ${meta.image ? `<meta name="twitter:image" content="${escapeHtml(meta.image)}" />` : ''}
+        <script type="application/ld+json">${JSON.stringify(articleSchema)}</script>
+        <script type="application/ld+json">${JSON.stringify(breadcrumbSchema)}</script>
+      `;
+      const body = `
+        <header class="top"><div class="wrap top-inner"><a class="brand" href="/">The Ngalung Atelier</a><nav class="nav"><a href="/">Home</a><a href="/#products-catalog">Products</a><a href="/articles">Articles</a><a href="/#about-section">About</a><a href="/purchases">My Purchases</a></nav></div></header>
+        <main class="article">
+          <nav class="eyebrow"><a href="/">Home</a> &gt; <a href="/articles">Articles</a> &gt; ${escapeHtml(article.category)}</nav>
+          <article>
+            <header>
+              <div class="meta">${escapeHtml(article.category)}</div>
+              <h1>${escapeHtml(article.title)}</h1>
+              <p class="lead">${escapeHtml(article.excerpt)}</p>
+              <div class="byline"><span>By ${escapeHtml(article.author)}</span><span>${date} · Updated ${updated} · ${calculateReadingTime(article.content || article.excerpt)} min read</span></div>
+              ${article.featuredImage ? `<img class="article-cover" src="${escapeHtml(article.featuredImage)}" alt="${escapeHtml(article.featuredImageAlt || article.title)}" />` : ''}
+            </header>
+            <section class="article-body">${article.content ? renderArticleMarkdown(article.content) : '<p>This article is being prepared.</p>'}</section>
+          </article>
+          ${relatedArticles.length ? `<section><div class="eyebrow">Related Articles</div><div class="grid">${relatedArticles.map(renderArticleCard).join('')}</div></section>` : ''}
+        </main>
+        <footer><div class="wrap">© ${new Date().getFullYear()} The Ngalung Atelier.</div></footer>
+      `;
+      res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=300');
+      res.send(articleShell(`${meta.title} | The Ngalung Atelier`, body, head));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  app.get('/robots.txt', (_req, res) => {
+    const baseUrl = process.env.PUBLIC_APP_URL || process.env.APP_URL || '';
+    res.type('text/plain').send(`User-agent: *
+Allow: /
+Allow: /articles
+Disallow: /admin
+Disallow: /api/admin
+Disallow: /storage
+Disallow: /data
+
+${baseUrl ? `Sitemap: ${baseUrl.replace(/\/$/, '')}/sitemap.xml` : 'Sitemap: /sitemap.xml'}
+`);
+  });
+
+  app.get('/sitemap.xml', async (req, res) => {
+    try {
+      const baseUrl = getBaseUrl(req);
+      const activeStore = getActiveStore();
+      const [products, articles] = await Promise.all([
+        activeStore.getProducts(),
+        activeStore.getArticles(false)
+      ]);
+      const urls = [
+        { loc: `${baseUrl}/`, lastmod: new Date().toISOString() },
+        { loc: `${baseUrl}/articles`, lastmod: new Date().toISOString() },
+        { loc: `${baseUrl}/terms`, lastmod: new Date().toISOString() },
+        { loc: `${baseUrl}/privacy`, lastmod: new Date().toISOString() },
+        ...products.filter((p: Product) => p.isPublished).map((p: Product) => ({ loc: `${baseUrl}/p/${p.slug}`, lastmod: p.updatedAt || p.createdAt })),
+        ...articles.map((a: Article) => ({ loc: `${baseUrl}/articles/${a.slug}`, lastmod: a.updatedAt || a.publishedAt || a.createdAt }))
+      ];
+      const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls.map(url => `  <url><loc>${xmlEscape(url.loc)}</loc><lastmod>${xmlEscape(new Date(url.lastmod).toISOString())}</lastmod></url>`).join('\n')}
+</urlset>`;
+      res.type('application/xml').send(xml);
+    } catch (err: any) {
+      res.status(500).type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?><error>${xmlEscape(err.message || 'Sitemap failed')}</error>`);
     }
   });
 
@@ -1265,20 +1535,23 @@ export async function createApp(options: CreateAppOptions = {}) {
   app.get('/api/orders/:id/reconcile', requireCustomerAuth, handleOrderStatusReconcile);
 
   // 10. Analytics Event Tracking (Public click/visit log)
-  const handleAnalyticsTrack = (req: express.Request, res: express.Response) => {
+  const handleAnalyticsTrack = async (req: express.Request, res: express.Response) => {
     try {
-      const { visitorId, productId, productSlug, type, source = 'direct', path = '/', amount } = req.body;
+      const { visitorId, productId, productSlug, articleId, articleSlug, type, source = 'direct', path = '/', amount } = req.body;
       if (!type) {
         return res.status(400).json({ success: false, message: 'Event type is required' });
       }
 
-      const validTypes = ['visit', 'page_view', 'product_view', 'buy_click', 'checkout_start', 'purchase', 'click'];
+      const validTypes = ['visit', 'page_view', 'product_view', 'article_view', 'book_cta_click', 'buy_click', 'checkout_start', 'purchase', 'click'];
       const normalizedType = validTypes.includes(type) ? type : 'visit';
 
-      const event = store.logEvent({
+      const activeStore = getActiveStore();
+      const event = await activeStore.logEvent({
         visitorId: visitorId ? String(visitorId).trim() : undefined,
         productId,
         productSlug,
+        articleId,
+        articleSlug,
         type: normalizedType,
         source: (source || 'direct').toLowerCase(),
         path: path || '/',
@@ -1601,6 +1874,89 @@ export async function createApp(options: CreateAppOptions = {}) {
   // ==========================================
   // PROTECTED ADMIN API ROUTES (requireAdmin)
   // ==========================================
+
+  // Admin Articles List (Includes published, draft, and archived)
+  app.get('/api/admin/articles', requireAdmin, async (_req, res) => {
+    try {
+      const articles = await getActiveStore().getArticles(true);
+      res.json({ success: true, articles });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.get('/api/admin/articles/:id', requireAdmin, async (req, res) => {
+    try {
+      const article = await getActiveStore().getArticleById(req.params.id) || await getActiveStore().getArticleBySlug(req.params.id, true);
+      if (!article) {
+        return res.status(404).json({ success: false, message: 'Article not found' });
+      }
+      const relatedArticles = await getActiveStore().getRelatedArticles(article, 3);
+      res.json({ success: true, article, relatedArticles });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  const handleSaveArticle = async (req: express.Request, res: express.Response) => {
+    try {
+      const articleData = req.body as Partial<Article>;
+      if (!articleData.title || !String(articleData.title).trim()) {
+        return res.status(400).json({ success: false, message: 'Article title is required' });
+      }
+      const saved = await getActiveStore().saveArticle(articleData);
+      res.json({ success: true, article: saved });
+    } catch (err: any) {
+      const status = err.message?.toLowerCase().includes('duplicate') || err.message?.toLowerCase().includes('unique') ? 409 : 500;
+      res.status(status).json({ success: false, error: err.message, message: err.message || 'Failed to save article' });
+    }
+  };
+
+  app.post('/api/admin/articles', requireAdmin, handleSaveArticle);
+  app.put('/api/admin/articles/:id', requireAdmin, async (req, res) => {
+    req.body.id = req.params.id;
+    return handleSaveArticle(req, res);
+  });
+
+  app.post('/api/admin/articles/:id/publish', requireAdmin, async (req, res) => {
+    try {
+      const result = await getActiveStore().publishArticle(req.params.id);
+      if (!result.success) return res.status(404).json(result);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post('/api/admin/articles/:id/unpublish', requireAdmin, async (req, res) => {
+    try {
+      const result = await getActiveStore().unpublishArticle(req.params.id);
+      if (!result.success) return res.status(404).json(result);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post('/api/admin/articles/:id/archive', requireAdmin, async (req, res) => {
+    try {
+      const result = await getActiveStore().archiveArticle(req.params.id);
+      if (!result.success) return res.status(404).json(result);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.delete('/api/admin/articles/:id', requireAdmin, async (req, res) => {
+    try {
+      const result = await getActiveStore().deleteArticle(req.params.id);
+      if (!result.success) return res.status(404).json(result);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
 
   // Admin Products List (Includes all products, published & drafts)
   app.get('/api/admin/products', requireAdmin, (req, res) => {

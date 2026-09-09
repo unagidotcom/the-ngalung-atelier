@@ -171,18 +171,62 @@ export interface AccessPayload {
   message?: string;
 }
 
-export type AnalyticsEventType = 'visit' | 'page_view' | 'product_view' | 'buy_click' | 'checkout_start' | 'purchase' | 'click';
+export type AnalyticsEventType = 'visit' | 'page_view' | 'product_view' | 'article_view' | 'book_cta_click' | 'buy_click' | 'checkout_start' | 'purchase' | 'click';
 
 export interface AnalyticsEvent {
   id: string;
   visitorId?: string;
   productId?: string;
   productSlug?: string;
+  articleId?: string;
+  articleSlug?: string;
   type: AnalyticsEventType;
   source: string; // e.g. instagram, linkedin, twitter, direct, etc.
   path: string;
   amount?: number;
   timestamp: string;
+}
+
+export type ArticleStatus = 'draft' | 'published' | 'archived';
+
+export interface ArticleBookCta {
+  enabled: boolean;
+  coverImage?: string;
+  title: string;
+  author: string;
+  description: string;
+  amazonUrl?: string;
+  googlePlayUrl?: string;
+}
+
+export interface Article {
+  id: string;
+  title: string;
+  slug: string;
+  excerpt: string;
+  content: string;
+  author: string;
+  category: string;
+  tags: string[];
+  featuredImage: string;
+  featuredImageAlt: string;
+  primaryKeyword: string;
+  secondaryKeywords: string[];
+  seoTitle: string;
+  metaDescription: string;
+  canonicalUrl?: string;
+  ogTitle: string;
+  ogDescription: string;
+  ogImage: string;
+  socialShareTitle?: string;
+  socialShareDescription?: string;
+  socialShareImage?: string;
+  status: ArticleStatus;
+  publishedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  bookCta?: ArticleBookCta;
+  views?: number;
 }
 
 export interface AdminUser {

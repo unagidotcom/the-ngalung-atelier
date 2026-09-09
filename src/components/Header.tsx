@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Package, Info, KeyRound, ArrowLeft, LogIn, LogOut, ShieldCheck, UserPlus } from 'lucide-react';
+import { Home, Package, Info, KeyRound, ArrowLeft, LogIn, LogOut, ShieldCheck, UserPlus, BookOpen } from 'lucide-react';
 import { PublicStoreInfo, StoreSettings, CustomerUser } from '../types';
 import { LogoMark } from './LogoMark';
 
@@ -60,8 +60,8 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         </div>
 
-        {/* Public Navigation Links - shown when customer is authenticated or exploring */}
-        {customerUser && (
+        {/* Public Navigation Links */}
+        {(
           <nav className="hidden items-center gap-1 sm:flex">
             <button
               id="nav-home-btn"
@@ -87,6 +87,19 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <Package className="h-3.5 w-3.5" />
               <span>Products</span>
+            </button>
+
+            <button
+              id="nav-articles-btn"
+              onClick={() => onNavigate('articles')}
+              className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium tracking-wide transition-all cursor-pointer ${
+                currentView === 'articles' || currentView === 'article'
+                  ? 'bg-[#17181F] text-[#FAF6EE] font-bold shadow-2xs'
+                  : 'text-[#6E6C63] hover:bg-[#F3EDE0] hover:text-[#17181F]'
+              }`}
+            >
+              <BookOpen className="h-3.5 w-3.5" />
+              <span>Articles</span>
             </button>
 
             <button
@@ -247,6 +260,14 @@ export const Header: React.FC<HeaderProps> = ({
             Products
           </button>
           <button
+            onClick={() => onNavigate('articles')}
+            className={`px-2 py-1 text-xs font-semibold ${
+              currentView === 'articles' || currentView === 'article' ? 'text-[#17181F] font-bold' : 'text-[#6E6C63]'
+            }`}
+          >
+            Articles
+          </button>
+          <button
             onClick={() => onNavigate('purchases')}
             className={`px-2 py-1 text-xs font-semibold ${
               currentView === 'purchases' ? 'text-[#17181F] font-bold' : 'text-[#6E6C63]'
@@ -273,6 +294,14 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       ) : (
         <div className="flex items-center justify-around border-t border-[#E7DFCE] bg-[#FAF6EE] px-2 py-1.5 sm:hidden">
+          <button
+            onClick={() => onNavigate('articles')}
+            className={`px-3 py-1.5 text-xs font-bold ${
+              currentView === 'articles' || currentView === 'article' ? 'text-[#FF5A36]' : 'text-[#6E6C63]'
+            }`}
+          >
+            Articles
+          </button>
           <button
             onClick={() => onNavigate('admin')}
             className={`px-3 py-1.5 text-xs font-bold ${

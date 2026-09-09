@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   LayoutDashboard,
   Package,
+  BookOpen,
   ShoppingCart,
   Users,
   BarChart3,
@@ -21,6 +22,7 @@ import {
 } from 'lucide-react';
 import {
   Product,
+  Article,
   ProductStatus,
   Order,
   DashboardStats,
@@ -35,6 +37,7 @@ import {
   fetchDashboardStats,
   fetchAnalyticsSummary,
   fetchProducts,
+  fetchAdminArticles,
   saveProduct,
   deleteProduct,
   resetCatalogToDefaults,
@@ -51,6 +54,7 @@ import { AdminLogin } from './AdminLogin';
 import { LogoMark } from './LogoMark';
 import { DashboardOverview } from './admin/DashboardOverview';
 import { ProductManagement } from './admin/ProductManagement';
+import { ArticleManagement } from './admin/ArticleManagement';
 import { OrdersManagement } from './admin/OrdersManagement';
 import { CustomersManagement } from './admin/CustomersManagement';
 import { AnalyticsOverview } from './admin/AnalyticsOverview';
@@ -59,13 +63,15 @@ import { SettingsSection } from './admin/SettingsSection';
 interface AdminDashboardProps {
   onNavigateHome: () => void;
   onPreviewProduct: (slug: string) => void;
+  onPreviewArticle: (slug: string) => void;
 }
 
-type AdminTab = 'dashboard' | 'products' | 'orders' | 'customers' | 'analytics' | 'settings';
+type AdminTab = 'dashboard' | 'products' | 'articles' | 'orders' | 'customers' | 'analytics' | 'settings';
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onNavigateHome,
-  onPreviewProduct
+  onPreviewProduct,
+  onPreviewArticle
 }) => {
   // Authentication State
   const [currentUser, setCurrentUser] = useState<AdminUser | null>(null);
@@ -78,6 +84,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
+  const [articles, setArticles] = useState<Article[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [customers, setCustomers] = useState<AdminCustomer[]>([]);
   const [settings, setSettings] = useState<StoreSettings | null>(null);
@@ -123,10 +130,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setLoading(true);
     setActionError('');
     try {
-      const [dashStats, summ, prods, ords, custs, setts, gway] = await Promise.all([
+      const [dashStats, summ, prods, arts, ords, custs, setts, gway] = await Promise.all([
         fetchDashboardStats(),
         fetchAnalyticsSummary(timeRange).catch(() => null),
         fetchProducts(true),
+        fetchAdminArticles().catch(() => []),
         fetchAdminOrders(),
         fetchAdminCustomers().catch(() => []),
         fetchStoreSettings(),
@@ -135,6 +143,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setStats(dashStats);
       if (summ) setSummary(summ);
       setProducts(prods);
+      setArticles(arts);
       setOrders(ords);
       setCustomers(custs);
       setSettings(setts);
@@ -176,6 +185,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setStats(null);
       setSummary(null);
       setProducts([]);
+      setArticles([]);
       setOrders([]);
       setCustomers([]);
       setSettings(null);
@@ -441,6 +451,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </button>
 
             <button
+              id="admin-nav-articles"
+              onClick={() => setActiveTab('articles')}
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === 'articles'
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <BookOpen className="w-4 h-4" />
+                <span>Articles</span>
+              </div>
+              <span
+                className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
+                  activeTab === 'articles' ? 'bg-slate-800 text-slate-200' : 'bg-slate-100 text-slate-600'
+                }`}
+              >
+                {articles.length}
+              </span>
+            </button>
+
+            <button
               id="admin-nav-orders"
               onClick={() => setActiveTab('orders')}
               className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
@@ -573,7 +605,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             />
           )}
 
-          {/* TAB 3: ORDERS CRM */}
+          {/* TAB 3: ARTICLE MANAGEMENT & SEO */}
+          {activeTab === 'articles' && (
+            <ArticleManagement
+              articles={articles}
+              onRefreshArticles={loadAllData}
+              onPreviewPublicArticle={onPreviewArticle}
+            />
+          )}
+
+          {/* TAB 4: ORDERS CRM */}
           {activeTab === 'orders' && (
             <OrdersManagement
               orders={orders}
@@ -581,7 +622,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             />
           )}
 
-          {/* TAB 4: CUSTOMERS CRM */}
+          {/* TAB 5: CUSTOMERS CRM */}
           {activeTab === 'customers' && (
             <CustomersManagement
               customers={customers}
@@ -589,7 +630,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             />
           )}
 
-          {/* TAB 5: ANALYTICS & FUNNELS */}
+          {/* TAB 6: ANALYTICS & FUNNELS */}
           {activeTab === 'analytics' && (
             <AnalyticsOverview
               initialStats={stats}
@@ -597,7 +638,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             />
           )}
 
-          {/* TAB 6: STORE SETTINGS & RAZORPAY */}
+          {/* TAB 7: STORE SETTINGS & RAZORPAY */}
           {activeTab === 'settings' && settings && (
             <SettingsSection
               settings={settings}
