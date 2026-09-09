@@ -106,7 +106,7 @@ export const Header: React.FC<HeaderProps> = ({
       onClick: () => onNavigate('contact'),
       active: currentView === 'contact'
     },
-    ...(hasAdminSession ? [{
+    ...(!customerUser && hasAdminSession ? [{
       label: 'Admin Dashboard',
       icon: <ShieldCheck className="h-4 w-4" />,
       onClick: () => onNavigate('admin'),
