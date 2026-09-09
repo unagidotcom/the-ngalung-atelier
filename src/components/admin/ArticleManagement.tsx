@@ -7,6 +7,7 @@ import {
   ExternalLink,
   Eye,
   EyeOff,
+  FilePenLine,
   Image,
   Plus,
   RefreshCw,
@@ -42,25 +43,25 @@ const categoryOptions = [
 ];
 
 const firstArticleDraft: Partial<Article> = {
-  title: 'Client Acquisition for Freelancers: A Complete Guide to Getting Consistent Clients',
-  slug: 'client-acquisition-for-freelancers',
+  title: '',
+  slug: '',
   excerpt: '',
   content: '',
   author: 'Ng Kharinghor',
-  category: 'Client Acquisition',
-  tags: ['client acquisition', 'freelancing'],
+  category: 'Digital Business',
+  tags: [],
   featuredImage: '',
   featuredImageAlt: '',
-  primaryKeyword: 'client acquisition for freelancers',
+  primaryKeyword: '',
   secondaryKeywords: [],
-  seoTitle: 'Client Acquisition for Freelancers: Complete Guide (2026)',
-  metaDescription: 'Learn how to build a client acquisition system as a freelancer using positioning, prospecting, outreach, referrals, discovery calls, proposals and follow-ups.',
+  seoTitle: '',
+  metaDescription: '',
   canonicalUrl: '',
-  ogTitle: 'Client Acquisition for Freelancers: Complete Guide (2026)',
-  ogDescription: 'Learn how to build a client acquisition system as a freelancer using positioning, prospecting, outreach, referrals, discovery calls, proposals and follow-ups.',
+  ogTitle: '',
+  ogDescription: '',
   ogImage: '',
-  socialShareTitle: 'Client Acquisition for Freelancers: Complete Guide (2026)',
-  socialShareDescription: 'Learn how to build a client acquisition system as a freelancer using positioning, prospecting, outreach, referrals, discovery calls, proposals and follow-ups.',
+  socialShareTitle: '',
+  socialShareDescription: '',
   socialShareImage: '',
   status: 'draft',
   bookCta: {
@@ -297,15 +298,37 @@ export const ArticleManagement: React.FC<ArticleManagementProps> = ({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="font-display text-xl font-bold text-[#17181F]">Articles & SEO Library</h2>
-          <p className="text-xs text-[#6E6C63]">Manage article drafts, metadata, publishing, and book discovery CTAs.</p>
+          <p className="text-xs text-[#6E6C63]">Write, optimize, preview, publish, and review customer-submitted articles.</p>
         </div>
         <button
           type="button"
           onClick={handleNewArticle}
-          className="inline-flex items-center gap-1.5 rounded-full bg-[#17181F] px-4 py-2 text-xs font-bold text-[#FAF6EE] shadow-2xs hover:bg-[#31333F]"
+          className="inline-flex items-center gap-1.5 rounded-full bg-[#FF5A36] px-5 py-2.5 text-xs font-bold text-white shadow-2xs hover:bg-[#E94D2C]"
+        >
+          <FilePenLine className="h-4 w-4" />
+          Write Article
+        </button>
+      </div>
+
+      <div className="grid gap-3 rounded-3xl border border-[#E7DFCE] bg-[#17181F] p-5 text-[#FAF6EE] shadow-2xs md:grid-cols-[1fr_auto] md:items-center">
+        <div className="flex items-start gap-4">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#FF5A36] text-white">
+            <FilePenLine className="h-5 w-5" />
+          </div>
+          <div>
+            <h3 className="font-display text-2xl font-bold">Write and publish an article</h3>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-[#C9C3B6]">
+              Add the main heading, SEO title, focus keyword, tags, cover image, article body, preview it, then publish from the editor.
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={handleNewArticle}
+          className="inline-flex items-center justify-center gap-2 rounded-full bg-[#FAF6EE] px-5 py-3 text-xs font-bold text-[#17181F] hover:bg-white"
         >
           <Plus className="h-4 w-4 text-[#FF5A36]" />
-          New Article
+          Start Writing
         </button>
       </div>
 
@@ -363,7 +386,19 @@ export const ArticleManagement: React.FC<ArticleManagementProps> = ({
             <tbody className="divide-y divide-[#E7DFCE]">
               {filteredArticles.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="p-8 text-center text-[#6E6C63]">No articles found.</td>
+                  <td colSpan={9} className="p-8 text-center text-[#6E6C63]">
+                    <div className="flex flex-col items-center gap-3">
+                      <span>No articles found.</span>
+                      <button
+                        type="button"
+                        onClick={handleNewArticle}
+                        className="inline-flex items-center gap-2 rounded-full bg-[#17181F] px-4 py-2 text-xs font-bold text-[#FAF6EE] hover:bg-[#31333F]"
+                      >
+                        <FilePenLine className="h-4 w-4 text-[#FF5A36]" />
+                        Write Article
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ) : filteredArticles.map(article => {
                 const seoReady = Boolean(article.seoTitle && article.metaDescription && article.slug && article.featuredImageAlt);
@@ -447,7 +482,7 @@ export const ArticleManagement: React.FC<ArticleManagementProps> = ({
           <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/70 p-5">
               <div>
-                <h3 className="font-display text-lg font-bold text-slate-900">{editingArticle.id ? 'Edit Article' : 'New Article'}</h3>
+                <h3 className="font-display text-lg font-bold text-slate-900">{editingArticle.id ? 'Edit Article' : 'Write Article'}</h3>
                 <p className="text-xs text-slate-500">{editingArticle.status || 'draft'} · {calculateReadingTime(editingArticle.content || editingArticle.excerpt || '')} min read</p>
               </div>
               <button type="button" onClick={() => setEditingArticle(null)} className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500">
@@ -458,13 +493,54 @@ export const ArticleManagement: React.FC<ArticleManagementProps> = ({
             <div className="grid flex-1 overflow-y-auto lg:grid-cols-[1fr_340px]">
               <div className="space-y-5 p-5 text-xs">
                 <section className="space-y-4">
-                  <h4 className="font-mono text-[11px] font-bold uppercase tracking-wider text-[#FF5A36]">Article Information</h4>
+                  <h4 className="font-mono text-[11px] font-bold uppercase tracking-wider text-[#FF5A36]">Heading, Title & Keywords</h4>
                   <div>
-                    <label className="mb-1 block font-bold text-slate-700">Article Title *</label>
-                    <input value={editingArticle.title || ''} onChange={e => updateEditingArticle({ title: e.target.value, slug: createArticleSlug(e.target.value) })} className="w-full rounded-xl border border-slate-300 px-3.5 py-2 outline-none focus:ring-2 focus:ring-emerald-500" />
+                    <label className="mb-1 block font-bold text-slate-700">Main Heading / H1 *</label>
+                    <input
+                      value={editingArticle.title || ''}
+                      onChange={e => updateEditingArticle({
+                        title: e.target.value,
+                        slug: createArticleSlug(e.target.value),
+                        seoTitle: editingArticle.seoTitle || e.target.value
+                      })}
+                      placeholder="Write the article heading customers and Google will see"
+                      className="w-full rounded-xl border border-slate-300 px-3.5 py-2 outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
                   </div>
                   <div>
-                    <label className="mb-1 block font-bold text-slate-700">Subtitle / Excerpt</label>
+                    <div className="mb-1 flex justify-between font-bold text-slate-700">
+                      <label>SEO Browser Title</label>
+                      <span className="font-mono text-[10px] text-slate-400">{(editingArticle.seoTitle || '').length}/60</span>
+                    </div>
+                    <input
+                      value={editingArticle.seoTitle || ''}
+                      onChange={e => updateEditingArticle({ seoTitle: e.target.value })}
+                      placeholder="Short search result title"
+                      className="w-full rounded-xl border border-slate-300 px-3.5 py-2 outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block font-bold text-slate-700">Focus Keyword *</label>
+                      <input
+                        value={editingArticle.primaryKeyword || ''}
+                        onChange={e => updateEditingArticle({ primaryKeyword: e.target.value })}
+                        placeholder="e.g. client acquisition for freelancers"
+                        className="w-full rounded-xl border border-slate-300 px-3.5 py-2 outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block font-bold text-slate-700">Secondary Keywords</label>
+                      <input
+                        value={(editingArticle.secondaryKeywords || []).join(', ')}
+                        onChange={e => updateEditingArticle({ secondaryKeywords: splitCommaList(e.target.value) })}
+                        placeholder="keyword one, keyword two"
+                        className="w-full rounded-xl border border-slate-300 px-3.5 py-2 outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="mb-1 block font-bold text-slate-700">Summary / Excerpt</label>
                     <textarea rows={3} value={editingArticle.excerpt || ''} onChange={e => updateEditingArticle({ excerpt: e.target.value })} className="w-full rounded-xl border border-slate-300 px-3.5 py-2 outline-none focus:ring-2 focus:ring-emerald-500" />
                   </div>
                   <div className="grid gap-4 sm:grid-cols-2">
@@ -481,7 +557,7 @@ export const ArticleManagement: React.FC<ArticleManagementProps> = ({
                   </div>
                   <div>
                     <label className="mb-1 block font-bold text-slate-700">Tags</label>
-                    <input value={(editingArticle.tags || []).join(', ')} onChange={e => updateEditingArticle({ tags: splitCommaList(e.target.value) })} className="w-full rounded-xl border border-slate-300 px-3.5 py-2 outline-none focus:ring-2 focus:ring-emerald-500" />
+                    <input value={(editingArticle.tags || []).join(', ')} onChange={e => updateEditingArticle({ tags: splitCommaList(e.target.value) })} placeholder="freelancing, marketing, templates" className="w-full rounded-xl border border-slate-300 px-3.5 py-2 outline-none focus:ring-2 focus:ring-emerald-500" />
                   </div>
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <label className="mb-2 block font-bold text-slate-700">Featured Image</label>
@@ -496,13 +572,13 @@ export const ArticleManagement: React.FC<ArticleManagementProps> = ({
                 </section>
 
                 <section className="space-y-3">
-                  <h4 className="font-mono text-[11px] font-bold uppercase tracking-wider text-[#FF5A36]">Content</h4>
+                  <h4 className="font-mono text-[11px] font-bold uppercase tracking-wider text-[#FF5A36]">Article Body</h4>
                   <textarea
                     rows={18}
                     value={editingArticle.content || ''}
                     onChange={e => updateEditingArticle({ content: e.target.value })}
                     className="w-full rounded-2xl border border-slate-300 px-4 py-3 font-mono text-[12px] leading-relaxed outline-none focus:ring-2 focus:ring-emerald-500"
-                    placeholder="Paste the final article here."
+                    placeholder="Write the full article here. Markdown headings, lists, links, and tables are supported."
                   />
                 </section>
 
@@ -600,7 +676,7 @@ export const ArticleManagement: React.FC<ArticleManagementProps> = ({
                 </button>
                 <button type="button" disabled={saving || uploading} onClick={() => handleSave('published')} className="inline-flex items-center gap-1.5 rounded-full bg-[#17181F] px-5 py-2 font-bold text-[#FAF6EE] disabled:opacity-50">
                   {saving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <BookOpen className="h-3.5 w-3.5 text-[#FF5A36]" />}
-                  Publish / Update
+                  Publish Article
                 </button>
               </div>
             </div>
