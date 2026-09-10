@@ -41,6 +41,32 @@ export class SupabaseStorageProvider implements IObjectStorageService {
     return this.client;
   }
 
+  private async ensureBucketExists(): Promise<void> {
+    const supabase = this.getClient();
+    const { error } = await supabase.storage.getBucket(this.bucketName);
+    if (!error) return;
+
+    const { data: buckets, error: listError } = await supabase.storage.listBuckets();
+    if (listError) {
+      throw new Error(`Unable to verify Supabase Storage buckets: ${listError.message}`);
+    }
+
+    const found = buckets?.some(bucket => bucket.name === this.bucketName);
+    if (found) return;
+
+    const maxMb = Number(process.env.MAX_PRODUCT_FILE_MB) || 100;
+    const { error: createError } = await supabase.storage.createBucket(this.bucketName, {
+      public: false,
+      fileSizeLimit: maxMb * 1024 * 1024
+    });
+
+    if (createError) {
+      const message = createError.message || '';
+      if (message.toLowerCase().includes('already exists')) return;
+      throw new Error(`Supabase Storage bucket '${this.bucketName}' could not be created: ${message}`);
+    }
+  }
+
   async uploadPrivateFile(
     key: string,
     buffer: Buffer,
@@ -49,6 +75,7 @@ export class SupabaseStorageProvider implements IObjectStorageService {
   ): Promise<StorageUploadResult> {
     const supabase = this.getClient();
     const cleanKey = key.replace(/^\/+/, '');
+    await this.ensureBucketExists();
 
     const { data, error } = await supabase.storage
       .from(this.bucketName)
@@ -234,6 +261,7 @@ export class SupabaseStorageProvider implements IObjectStorageService {
 
     try {
       const supabase = this.getClient();
+      await this.ensureBucketExists();
       const { data, error } = await supabase.storage.getBucket(this.bucketName);
 
       if (error) {
