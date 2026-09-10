@@ -221,6 +221,7 @@ class DataStore {
         primaryUrl: '',
         accessInstructions: ''
       },
+      productMetadata: productData.productMetadata,
       badge: productData.badge || 'NEW',
       status,
       isPublished,

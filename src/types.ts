@@ -1,4 +1,16 @@
-export type ProductCategory = 'Course' | 'Ebook' | 'Template' | 'Code' | 'Design' | 'Bundle';
+export type ProductCategory =
+  | 'Course'
+  | 'Video Course'
+  | 'Ebook'
+  | 'Book'
+  | 'Template'
+  | 'Code'
+  | 'Code Template'
+  | 'Design'
+  | 'Bundle'
+  | 'Audio / Sample Pack'
+  | 'Preset Pack'
+  | 'Design Asset';
 
 export type DigitalAssetType = 'file_download' | 'notion_template' | 'course_link' | 'license_key' | 'bundle';
 
@@ -69,6 +81,35 @@ export interface UploadedFileMetadata {
 
 export type ProductStatus = 'published' | 'draft' | 'archived';
 
+export type ProductAgeGroup = 'kids_0_12' | 'teens_13_17' | 'young_adults_18_24' | 'adults_25_54' | 'seniors_55_plus' | 'all_ages';
+export type ProductGenderTarget = 'Male' | 'Female' | 'All' | 'Unisex';
+export type ProductSkillLevel = 'Beginner' | 'Intermediate' | 'Advanced' | 'All Levels';
+export type ProductLicenseType = 'Personal Use' | 'Commercial Use' | 'Extended License';
+
+export interface ProductMetadata {
+  authorName?: string;
+  coAuthors?: string[];
+  publisher?: string;
+  originalPublishDate?: string;
+  releaseDateOnStore?: string;
+  language?: string;
+  pageCount?: number;
+  instructorName?: string;
+  coInstructors?: string[];
+  totalDuration?: string;
+  lessonCount?: number;
+  skillLevel?: ProductSkillLevel;
+  creatorName?: string;
+  compatiblePlatforms?: string[];
+  versionNumber?: string;
+  licenseType?: ProductLicenseType;
+  keywords: string[];
+  ageGroups: ProductAgeGroup[];
+  genderTarget: ProductGenderTarget;
+  primaryTargetRegion: string;
+  additionalTargetRegions: string[];
+}
+
 export interface Product {
   id: string;
   slug: string;
@@ -87,6 +128,7 @@ export interface Product {
   testimonials: ProductTestimonial[];
   faqs: ProductFAQ[];
   digitalAsset: ProductDigitalAsset;
+  productMetadata?: ProductMetadata;
   badge?: string;
   status?: ProductStatus;
   isPublished: boolean;

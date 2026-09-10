@@ -19,7 +19,7 @@ import { emailService } from './server/email';
 import { FileStorageService } from './server/fileStorage';
 import { getActiveStore, getDatabaseStatus, checkDatabaseConnection, isPostgresConfigured, runMigrations } from './server/db';
 import { storageService } from './server/storage';
-import { Product, StoreSettings, PublicStoreInfo, Order, OrderStatus, Article, ArticleReviewStatus } from './src/types';
+import { Product, ProductMetadata, StoreSettings, PublicStoreInfo, Order, OrderStatus, Article, ArticleReviewStatus } from './src/types';
 import { calculateReadingTime, renderArticleMarkdown } from './src/lib/articleMarkdown';
 
 // Configure multer in-memory storage for safe inspection and storage delegation
@@ -57,6 +57,41 @@ function xmlEscape(value: string = ''): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
+}
+
+function getProductMetadataKind(category?: string): 'book' | 'video' | 'template' | 'general' {
+  const normalized = String(category || '').trim().toLowerCase();
+  if (normalized === 'ebook' || normalized === 'book') return 'book';
+  if (normalized === 'course' || normalized === 'video course') return 'video';
+  if (normalized === 'template' || normalized.includes('template')) return 'template';
+  return 'general';
+}
+
+function validateProductMetadataForAdmin(productData: Partial<Product>): string | null {
+  const metadata = productData.productMetadata as Partial<ProductMetadata> | undefined;
+  if (!metadata) return 'Product Metadata is required.';
+
+  const kind = getProductMetadataKind(productData.category);
+  if (kind === 'book' && !metadata.authorName?.trim()) {
+    return 'Author Name is required for Ebook and Book products.';
+  }
+  if (kind === 'video' && !metadata.instructorName?.trim()) {
+    return 'Instructor Name is required for Video Course products.';
+  }
+  if (kind === 'template' && !metadata.creatorName?.trim()) {
+    return 'Creator Name is required for Template products.';
+  }
+  if (!metadata.primaryTargetRegion?.trim()) {
+    return 'Primary Target Region is required.';
+  }
+  const keywordCount = Array.isArray(metadata.keywords)
+    ? metadata.keywords.filter(keyword => String(keyword).trim()).length
+    : 0;
+  if (keywordCount < 7) {
+    return `Add at least 7 keywords (currently ${keywordCount}/7) to help this product get discovered.`;
+  }
+
+  return null;
 }
 
 function buildArticleMeta(article: Article, baseUrl: string) {
@@ -321,7 +356,7 @@ export async function createApp(options: CreateAppOptions = {}) {
 
   // Helper to sanitize product for public storefront consumption (strips gated vault URLs and storage keys)
   function sanitizePublicProduct(product: Product): Product {
-    const { digitalAsset, ...rest } = product;
+    const { digitalAsset, productMetadata, ...rest } = product;
     const sanitizedDigitalAsset = digitalAsset ? {
       type: digitalAsset.type,
       fileSize: digitalAsset.fileSize,
@@ -2303,6 +2338,10 @@ ${urls.map(url => `  <url><loc>${xmlEscape(url.loc)}</loc><lastmod>${xmlEscape(n
       if (!productData.title || !productData.priceINR) {
         return res.status(400).json({ success: false, message: 'Title and Price are required' });
       }
+      const metadataError = validateProductMetadataForAdmin(productData);
+      if (metadataError) {
+        return res.status(400).json({ success: false, message: metadataError });
+      }
       if (!productData.slug) {
         productData.slug = productData.title
           .toLowerCase()
@@ -2322,6 +2361,10 @@ ${urls.map(url => `  <url><loc>${xmlEscape(url.loc)}</loc><lastmod>${xmlEscape(n
     try {
       const { id } = req.params;
       const productData = { ...req.body, id } as Product;
+      const metadataError = validateProductMetadataForAdmin(productData);
+      if (metadataError) {
+        return res.status(400).json({ success: false, message: metadataError });
+      }
       const activeStore = getActiveStore();
       const saved = await activeStore.saveProduct(productData);
       res.json({ success: true, product: saved });
@@ -2771,7 +2814,8 @@ ${urls.map(url => `  <url><loc>${xmlEscape(url.loc)}</loc><lastmod>${xmlEscape(n
   // Database Initialization & Startup Verification
   if (runStartupChecks && isPostgresConfigured()) {
     console.log('[DATABASE] PostgreSQL connection string detected (DATABASE_URL). Checking connection...');
-    checkDatabaseConnection().then(async (status) => {
+    try {
+      const status = await checkDatabaseConnection();
       if (status.status === 'CONNECTED') {
         console.log('[DATABASE] ✓ PostgreSQL connected successfully. Verifying schema migrations...');
         try {
@@ -2783,9 +2827,9 @@ ${urls.map(url => `  <url><loc>${xmlEscape(url.loc)}</loc><lastmod>${xmlEscape(n
       } else {
         console.warn(`[DATABASE WARNING] PostgreSQL connection check: ${status.status} (${status.error || 'Unknown error'})`);
       }
-    }).catch(err => {
+    } catch (err: any) {
       console.error('[DATABASE ERROR]:', err.message);
-    });
+    }
   } else if (runStartupChecks) {
     if (process.env.NODE_ENV === 'production') {
       console.warn('[DATABASE WARNING] DATABASE_URL is not set in production. Local JSON datastore fallback active.');

@@ -146,14 +146,14 @@ export async function importJsonToPostgres(options: { dryRun?: boolean } = {}): 
           id, slug, title, tagline, description, category,
           price_inr, price_usd, original_price_inr, original_price_usd,
           cover_image, preview_images, features, modules, testimonials, faqs,
-          digital_asset, badge, status, is_published, featured, total_sales_count,
+          digital_asset, product_metadata, badge, status, is_published, featured, total_sales_count,
           rating_average, rating_count, created_at, updated_at
         ) VALUES (
           $1, $2, $3, $4, $5, $6,
           $7, $8, $9, $10,
           $11, $12, $13, $14, $15, $16,
           $17, $18, $19, $20, $21, $22,
-          $23, $24, $25, $26
+          $23, $24, $25, $26, $27
         )
         ON CONFLICT (id) DO UPDATE SET
           slug = EXCLUDED.slug,
@@ -172,6 +172,7 @@ export async function importJsonToPostgres(options: { dryRun?: boolean } = {}): 
           testimonials = EXCLUDED.testimonials,
           faqs = EXCLUDED.faqs,
           digital_asset = EXCLUDED.digital_asset,
+          product_metadata = EXCLUDED.product_metadata,
           badge = EXCLUDED.badge,
           status = EXCLUDED.status,
           is_published = EXCLUDED.is_published,
@@ -198,6 +199,7 @@ export async function importJsonToPostgres(options: { dryRun?: boolean } = {}): 
         JSON.stringify(p.testimonials || []),
         JSON.stringify(p.faqs || []),
         JSON.stringify(p.digitalAsset || {}),
+        JSON.stringify(p.productMetadata || {}),
         p.badge || 'NEW',
         p.status || 'published',
         p.isPublished !== undefined ? p.isPublished : true,

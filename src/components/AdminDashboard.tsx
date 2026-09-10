@@ -25,6 +25,11 @@ import {
 import {
   Product,
   Article,
+  ProductAgeGroup,
+  ProductGenderTarget,
+  ProductLicenseType,
+  ProductMetadata,
+  ProductSkillLevel,
   ProductStatus,
   Order,
   DashboardStats,
@@ -73,6 +78,117 @@ interface AdminDashboardProps {
 
 type AdminTab = 'dashboard' | 'products' | 'articles' | 'orders' | 'customers' | 'analytics' | 'settings';
 
+const COMMON_LANGUAGES = [
+  'English',
+  'Hindi',
+  'Nepali',
+  'Bengali',
+  'Tamil',
+  'Telugu',
+  'Marathi',
+  'Spanish',
+  'French',
+  'German',
+  'Portuguese',
+  'Arabic',
+  'Chinese',
+  'Japanese',
+  'Korean'
+];
+
+const COUNTRY_OPTIONS = [
+  'India',
+  'United States',
+  'United Kingdom',
+  'Canada',
+  'Australia',
+  'Nepal',
+  'Bhutan',
+  'Bangladesh',
+  'Singapore',
+  'United Arab Emirates',
+  'Germany',
+  'France',
+  'Spain',
+  'Brazil',
+  'Japan',
+  'South Korea',
+  'Global'
+];
+
+const AGE_GROUP_OPTIONS: Array<{ value: ProductAgeGroup; label: string }> = [
+  { value: 'kids_0_12', label: 'Kids (0-12)' },
+  { value: 'teens_13_17', label: 'Teens (13-17)' },
+  { value: 'young_adults_18_24', label: 'Young Adults (18-24)' },
+  { value: 'adults_25_54', label: 'Adults (25-54)' },
+  { value: 'seniors_55_plus', label: 'Seniors (55+)' },
+  { value: 'all_ages', label: 'All Ages' }
+];
+
+const GENDER_TARGET_OPTIONS: ProductGenderTarget[] = ['Male', 'Female', 'All', 'Unisex'];
+const SKILL_LEVEL_OPTIONS: ProductSkillLevel[] = ['Beginner', 'Intermediate', 'Advanced', 'All Levels'];
+const LICENSE_TYPE_OPTIONS: ProductLicenseType[] = ['Personal Use', 'Commercial Use', 'Extended License'];
+
+type MetadataCategoryKind = 'book' | 'video' | 'template' | 'general';
+
+function todayDateInputValue(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function getMetadataCategoryKind(category?: string): MetadataCategoryKind {
+  const normalized = String(category || '').trim().toLowerCase();
+  if (normalized === 'ebook' || normalized === 'book') return 'book';
+  if (normalized === 'course' || normalized === 'video course') return 'video';
+  if (normalized === 'template' || normalized.includes('template')) return 'template';
+  return 'general';
+}
+
+function uniqueTextValues(values: string[] = []): string[] {
+  const seen = new Set<string>();
+  return values
+    .map(value => value.trim())
+    .filter(value => {
+      const key = value.toLowerCase();
+      if (!value || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function normalizeProductMetadata(
+  category: string | undefined,
+  existing: Partial<ProductMetadata> | undefined,
+  defaultCreatorName: string,
+  defaultRegion: string
+): ProductMetadata {
+  const kind = getMetadataCategoryKind(category);
+  const releaseDateOnStore = existing?.releaseDateOnStore || todayDateInputValue();
+  const metadata: ProductMetadata = {
+    ...existing,
+    coAuthors: uniqueTextValues(existing?.coAuthors),
+    coInstructors: uniqueTextValues(existing?.coInstructors),
+    compatiblePlatforms: uniqueTextValues(existing?.compatiblePlatforms),
+    keywords: uniqueTextValues(existing?.keywords),
+    ageGroups: existing?.ageGroups?.length ? existing.ageGroups : [],
+    genderTarget: existing?.genderTarget || 'All',
+    primaryTargetRegion: existing?.primaryTargetRegion || defaultRegion,
+    additionalTargetRegions: uniqueTextValues(existing?.additionalTargetRegions),
+    language: existing?.language || 'English',
+    releaseDateOnStore
+  };
+
+  if (kind === 'template') {
+    metadata.creatorName = metadata.creatorName || defaultCreatorName;
+    metadata.licenseType = metadata.licenseType || 'Personal Use';
+  }
+
+  if (kind === 'video') {
+    metadata.skillLevel = metadata.skillLevel || 'All Levels';
+  }
+
+  return metadata;
+}
+
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onNavigateHome,
   onPreviewProduct,
@@ -113,6 +229,86 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [coverPreviewError, setCoverPreviewError] = useState(false);
   const coverInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const defaultMetadataCreator = settings?.creatorName || settings?.storeName || currentUser?.name || 'The Ngalung Atelier';
+  const defaultMetadataRegion = settings?.country || 'India';
+
+  const getNormalizedMetadata = (product: Partial<Product>): ProductMetadata =>
+    normalizeProductMetadata(product.category, product.productMetadata, defaultMetadataCreator, defaultMetadataRegion);
+
+  const updateProductMetadata = (updates: Partial<ProductMetadata>) => {
+    setEditingProduct(current => {
+      if (!current) return current;
+      return {
+        ...current,
+        productMetadata: normalizeProductMetadata(
+          current.category,
+          { ...current.productMetadata, ...updates },
+          defaultMetadataCreator,
+          defaultMetadataRegion
+        )
+      };
+    });
+  };
+
+  const addProductMetadataTag = (
+    field: 'coAuthors' | 'coInstructors' | 'compatiblePlatforms' | 'keywords' | 'additionalTargetRegions',
+    rawValue: string
+  ) => {
+    const values = rawValue.split(',').map(value => value.trim()).filter(Boolean);
+    if (values.length === 0) return;
+    const currentMetadata = editingProduct ? getNormalizedMetadata(editingProduct) : undefined;
+    const currentValues = currentMetadata?.[field] || [];
+    updateProductMetadata({ [field]: uniqueTextValues([...currentValues, ...values]) } as Partial<ProductMetadata>);
+  };
+
+  const removeProductMetadataTag = (
+    field: 'coAuthors' | 'coInstructors' | 'compatiblePlatforms' | 'keywords' | 'additionalTargetRegions',
+    value: string
+  ) => {
+    const currentMetadata = editingProduct ? getNormalizedMetadata(editingProduct) : undefined;
+    updateProductMetadata({
+      [field]: (currentMetadata?.[field] || []).filter(item => item !== value)
+    } as Partial<ProductMetadata>);
+  };
+
+  const toggleAgeGroup = (ageGroup: ProductAgeGroup) => {
+    const metadata = editingProduct ? getNormalizedMetadata(editingProduct) : undefined;
+    const selected = metadata?.ageGroups || [];
+    const next = ageGroup === 'all_ages'
+      ? ['all_ages']
+      : selected.includes(ageGroup)
+      ? selected.filter(value => value !== ageGroup)
+      : [...selected.filter(value => value !== 'all_ages'), ageGroup];
+    updateProductMetadata({ ageGroups: next as ProductAgeGroup[] });
+  };
+
+  const getProductMetadataValidationMessage = (product: Partial<Product>): string | null => {
+    const metadata = getNormalizedMetadata(product);
+    const kind = getMetadataCategoryKind(product.category);
+
+    if (kind === 'book' && !metadata.authorName?.trim()) {
+      return 'Author Name is required for Ebook and Book products.';
+    }
+
+    if (kind === 'video' && !metadata.instructorName?.trim()) {
+      return 'Instructor Name is required for Video Course products.';
+    }
+
+    if (kind === 'template' && !metadata.creatorName?.trim()) {
+      return 'Creator Name is required for Template products.';
+    }
+
+    if (!metadata.primaryTargetRegion?.trim()) {
+      return 'Primary Target Region is required.';
+    }
+
+    if ((metadata.keywords || []).length < 7) {
+      return `Add at least 7 keywords (currently ${(metadata.keywords || []).length}/7) to help this product get discovered.`;
+    }
+
+    return null;
+  };
 
   // Check auth session on mount
   useEffect(() => {
@@ -232,7 +428,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         type: 'file_download',
         primaryUrl: '',
         accessInstructions: ''
-      }
+      },
+      productMetadata: normalizeProductMetadata('Template', undefined, defaultMetadataCreator, defaultMetadataRegion)
     });
     setProductFormError('');
   };
@@ -303,6 +500,78 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
+  const renderMetadataTagInput = (
+    label: string,
+    field: 'coAuthors' | 'coInstructors' | 'compatiblePlatforms' | 'keywords' | 'additionalTargetRegions',
+    placeholder: string,
+    helperText?: string,
+    options?: string[],
+    requiredCount?: number
+  ) => {
+    if (!editingProduct) return null;
+    const metadata = getNormalizedMetadata(editingProduct);
+    const values = metadata[field] || [];
+    const inputListId = options ? `${field}-metadata-options` : undefined;
+
+    return (
+      <div>
+        <div className="flex items-center justify-between gap-3 mb-1">
+          <label className="block font-bold text-slate-700">{label}</label>
+          {requiredCount && (
+            <span className={`text-[10px] font-bold ${values.length >= requiredCount ? 'text-emerald-700' : 'text-red-600'}`}>
+              {values.length}/{requiredCount} required
+            </span>
+          )}
+        </div>
+        <div className="min-h-[42px] w-full rounded-xl border border-slate-300 bg-white px-2.5 py-1.5 focus-within:ring-2 focus-within:ring-emerald-500">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {values.map(value => (
+              <span
+                key={value}
+                className="inline-flex max-w-full items-center gap-1 rounded-full bg-slate-900 px-2 py-1 text-[11px] font-bold text-white"
+              >
+                <span className="truncate">{value}</span>
+                <button
+                  type="button"
+                  onClick={() => removeProductMetadataTag(field, value)}
+                  className="rounded-full text-slate-300 hover:text-white"
+                  title={`Remove ${value}`}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+            <input
+              type="text"
+              list={inputListId}
+              onKeyDown={event => {
+                if (event.key === 'Enter' || event.key === ',') {
+                  event.preventDefault();
+                  const input = event.currentTarget;
+                  addProductMetadataTag(field, input.value);
+                  input.value = '';
+                }
+              }}
+              onBlur={event => {
+                const input = event.currentTarget;
+                addProductMetadataTag(field, input.value);
+                input.value = '';
+              }}
+              className="min-w-[180px] flex-1 border-0 bg-transparent px-1 py-1 text-xs text-slate-800 outline-none placeholder:text-slate-400"
+              placeholder={values.length ? 'Add another...' : placeholder}
+            />
+            {options && (
+              <datalist id={inputListId}>
+                {options.map(option => <option key={option} value={option} />)}
+              </datalist>
+            )}
+          </div>
+        </div>
+        {helperText && <p className="mt-1 text-[11px] text-slate-500">{helperText}</p>}
+      </div>
+    );
+  };
+
   // Product Form Save
   const handleSaveProductForm = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -316,10 +585,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       return;
     }
 
+    const normalizedMetadata = getNormalizedMetadata(editingProduct);
+    const metadataError = getProductMetadataValidationMessage({
+      ...editingProduct,
+      productMetadata: normalizedMetadata
+    });
+    if (metadataError) {
+      setProductFormError(metadataError);
+      return;
+    }
+
     setIsSavingProduct(true);
     setProductFormError('');
     try {
-      const saved = await saveProduct(editingProduct);
+      const saved = await saveProduct({
+        ...editingProduct,
+        productMetadata: normalizedMetadata
+      });
       setEditingProduct(null);
       setActionMessage(`Product "${saved.title}" saved successfully.`);
       setTimeout(() => setActionMessage(''), 3000);
@@ -632,7 +914,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               onRefreshProducts={loadAllData}
               onEditProduct={p => {
                 setCoverPreviewError(false);
-                setEditingProduct({ ...p });
+                setEditingProduct({
+                  ...p,
+                  productMetadata: normalizeProductMetadata(p.category, p.productMetadata, defaultMetadataCreator, defaultMetadataRegion)
+                });
                 setProductFormError('');
                 setUploadError('');
               }}
@@ -747,11 +1032,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <label className="block font-bold text-slate-700 mb-1">Category</label>
                   <select
                     value={editingProduct.category || 'Template'}
-                    onChange={e => setEditingProduct({ ...editingProduct, category: e.target.value as any })}
+                    onChange={e => {
+                      const category = e.target.value as Product['category'];
+                      setEditingProduct({
+                        ...editingProduct,
+                        category,
+                        productMetadata: normalizeProductMetadata(
+                          category,
+                          editingProduct.productMetadata,
+                          defaultMetadataCreator,
+                          defaultMetadataRegion
+                        )
+                      });
+                    }}
                     className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white"
                   >
                     <option value="Template">Template</option>
                     <option value="Ebook">Ebook</option>
+                    <option value="Book">Book</option>
                     <option value="Audio / Sample Pack">Audio / Sample Pack</option>
                     <option value="Preset Pack">Preset Pack</option>
                     <option value="Design Asset">Design Asset</option>
@@ -822,6 +1120,314 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   placeholder="Detailed product features and deliverables..."
                 />
               </div>
+
+              {/* Product Metadata */}
+              {(() => {
+                const metadata = getNormalizedMetadata(editingProduct);
+                const kind = getMetadataCategoryKind(editingProduct.category);
+
+                return (
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-4">
+                    <div>
+                      <label className="block font-bold text-slate-700">Product Metadata</label>
+                    </div>
+
+                    {kind === 'book' && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block font-bold text-slate-700 mb-1">Author Name *</label>
+                          <input
+                            type="text"
+                            value={metadata.authorName || ''}
+                            onChange={e => updateProductMetadata({ authorName: e.target.value })}
+                            className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white"
+                            placeholder="e.g. Ngalung Atelier"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-bold text-slate-700 mb-1">Publisher</label>
+                          <input
+                            type="text"
+                            value={metadata.publisher || ''}
+                            onChange={e => updateProductMetadata({ publisher: e.target.value })}
+                            className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white"
+                            placeholder="e.g. The Ngalung Atelier"
+                          />
+                        </div>
+                        <div className="sm:col-span-2">
+                          {renderMetadataTagInput('Co-Author(s)', 'coAuthors', 'Type a name, then press Enter')}
+                        </div>
+                        <div>
+                          <label className="block font-bold text-slate-700 mb-1">Date of Original Publish</label>
+                          <input
+                            type="date"
+                            value={metadata.originalPublishDate || ''}
+                            onChange={e => updateProductMetadata({ originalPublishDate: e.target.value })}
+                            className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-bold text-slate-700 mb-1">Release Date on Store</label>
+                          <input
+                            type="date"
+                            value={metadata.releaseDateOnStore || todayDateInputValue()}
+                            onChange={e => updateProductMetadata({ releaseDateOnStore: e.target.value })}
+                            className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-bold text-slate-700 mb-1">Language</label>
+                          <input
+                            type="text"
+                            list="product-language-options"
+                            value={metadata.language || 'English'}
+                            onChange={e => updateProductMetadata({ language: e.target.value })}
+                            className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white"
+                            placeholder="English"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-bold text-slate-700 mb-1">Page Count</label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={metadata.pageCount || ''}
+                            onChange={e => updateProductMetadata({ pageCount: e.target.value ? Number(e.target.value) : undefined })}
+                            className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white"
+                            placeholder="120"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {kind === 'video' && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block font-bold text-slate-700 mb-1">Instructor Name *</label>
+                          <input
+                            type="text"
+                            value={metadata.instructorName || ''}
+                            onChange={e => updateProductMetadata({ instructorName: e.target.value })}
+                            className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white"
+                            placeholder="e.g. Lead instructor"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-bold text-slate-700 mb-1">Total Duration</label>
+                          <input
+                            type="text"
+                            value={metadata.totalDuration || ''}
+                            onChange={e => updateProductMetadata({ totalDuration: e.target.value })}
+                            className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white"
+                            placeholder="e.g. 4h 30m"
+                          />
+                        </div>
+                        <div className="sm:col-span-2">
+                          {renderMetadataTagInput('Co-Instructor(s)', 'coInstructors', 'Type a name, then press Enter')}
+                        </div>
+                        <div>
+                          <label className="block font-bold text-slate-700 mb-1">Number of Lessons/Modules</label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={metadata.lessonCount || ''}
+                            onChange={e => updateProductMetadata({ lessonCount: e.target.value ? Number(e.target.value) : undefined })}
+                            className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white"
+                            placeholder="12"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-bold text-slate-700 mb-1">Skill Level</label>
+                          <select
+                            value={metadata.skillLevel || 'All Levels'}
+                            onChange={e => updateProductMetadata({ skillLevel: e.target.value as ProductSkillLevel })}
+                            className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white"
+                          >
+                            {SKILL_LEVEL_OPTIONS.map(option => <option key={option} value={option}>{option}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block font-bold text-slate-700 mb-1">Date of Original Publish</label>
+                          <input
+                            type="date"
+                            value={metadata.originalPublishDate || ''}
+                            onChange={e => updateProductMetadata({ originalPublishDate: e.target.value })}
+                            className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-bold text-slate-700 mb-1">Release Date on Store</label>
+                          <input
+                            type="date"
+                            value={metadata.releaseDateOnStore || todayDateInputValue()}
+                            onChange={e => updateProductMetadata({ releaseDateOnStore: e.target.value })}
+                            className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white"
+                          />
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className="block font-bold text-slate-700 mb-1">Language</label>
+                          <input
+                            type="text"
+                            list="product-language-options"
+                            value={metadata.language || 'English'}
+                            onChange={e => updateProductMetadata({ language: e.target.value })}
+                            className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white"
+                            placeholder="English"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {kind === 'template' && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block font-bold text-slate-700 mb-1">Creator Name *</label>
+                          <input
+                            type="text"
+                            value={metadata.creatorName || ''}
+                            onChange={e => updateProductMetadata({ creatorName: e.target.value })}
+                            className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white"
+                            placeholder="The Ngalung Atelier"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-bold text-slate-700 mb-1">Version Number</label>
+                          <input
+                            type="text"
+                            value={metadata.versionNumber || ''}
+                            onChange={e => updateProductMetadata({ versionNumber: e.target.value })}
+                            className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white"
+                            placeholder="e.g. v1.2"
+                          />
+                        </div>
+                        <div className="sm:col-span-2">
+                          {renderMetadataTagInput(
+                            'Compatible Software/Platform',
+                            'compatiblePlatforms',
+                            'Type a platform, then press Enter',
+                            undefined,
+                            ['Notion', 'Figma', 'Excel', 'Google Sheets', 'Canva', 'Airtable', 'Framer', 'Webflow']
+                          )}
+                        </div>
+                        <div>
+                          <label className="block font-bold text-slate-700 mb-1">Release Date on Store</label>
+                          <input
+                            type="date"
+                            value={metadata.releaseDateOnStore || todayDateInputValue()}
+                            onChange={e => updateProductMetadata({ releaseDateOnStore: e.target.value })}
+                            className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-bold text-slate-700 mb-1">License Type</label>
+                          <select
+                            value={metadata.licenseType || 'Personal Use'}
+                            onChange={e => updateProductMetadata({ licenseType: e.target.value as ProductLicenseType })}
+                            className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white"
+                          >
+                            {LICENSE_TYPE_OPTIONS.map(option => <option key={option} value={option}>{option}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                    )}
+
+                    {kind === 'general' && (
+                      <div className="rounded-xl border border-dashed border-slate-300 bg-white px-3.5 py-3 text-[11px] font-semibold text-slate-500">
+                        No category-specific metadata fields are configured for this category yet.
+                      </div>
+                    )}
+
+                    <div className="border-t border-slate-200 pt-4 space-y-4">
+                      <div className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                        Discovery & Targeting
+                      </div>
+
+                      {renderMetadataTagInput(
+                        'Keywords / Search Tags *',
+                        'keywords',
+                        'Add keyword and press Enter',
+                        'Think like a customer searching for this - include topic, format, skill level, and use-case words.',
+                        undefined,
+                        7
+                      )}
+
+                      {metadata.keywords.length < 7 && (
+                        <p className="text-[11px] font-semibold text-red-600">
+                          Add at least 7 keywords (currently {metadata.keywords.length}/7) to help this product get discovered.
+                        </p>
+                      )}
+
+                      {metadata.keywords.length > 20 && (
+                        <p className="text-[11px] font-semibold text-amber-700">
+                          You have more than 20 keywords. Keep the list focused for cleaner admin search and future SEO generation.
+                        </p>
+                      )}
+
+                      <div>
+                        <label className="block font-bold text-slate-700 mb-2">Age Group</label>
+                        <div className="flex flex-wrap gap-2">
+                          {AGE_GROUP_OPTIONS.map(option => {
+                            const active = metadata.ageGroups.includes(option.value);
+                            return (
+                              <button
+                                key={option.value}
+                                type="button"
+                                onClick={() => toggleAgeGroup(option.value)}
+                                className={`rounded-full border px-3 py-1.5 text-[11px] font-bold transition-colors ${
+                                  active
+                                    ? 'border-slate-900 bg-slate-900 text-white'
+                                    : 'border-slate-300 bg-white text-slate-600 hover:border-slate-500'
+                                }`}
+                              >
+                                {option.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block font-bold text-slate-700 mb-1">Gender Target</label>
+                          <select
+                            value={metadata.genderTarget || 'All'}
+                            onChange={e => updateProductMetadata({ genderTarget: e.target.value as ProductGenderTarget })}
+                            className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white"
+                          >
+                            {GENDER_TARGET_OPTIONS.map(option => <option key={option} value={option}>{option}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block font-bold text-slate-700 mb-1">Primary Target Region *</label>
+                          <input
+                            type="text"
+                            list="product-region-options"
+                            value={metadata.primaryTargetRegion || ''}
+                            onChange={e => updateProductMetadata({ primaryTargetRegion: e.target.value })}
+                            className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white"
+                            placeholder="India"
+                          />
+                        </div>
+                      </div>
+
+                      {renderMetadataTagInput(
+                        'Additional Target Regions',
+                        'additionalTargetRegions',
+                        'Type a region, then press Enter',
+                        'Primary region drives default currency/marketing assumptions. Add more regions if this product is relevant globally.',
+                        COUNTRY_OPTIONS
+                      )}
+                    </div>
+
+                    <datalist id="product-language-options">
+                      {COMMON_LANGUAGES.map(language => <option key={language} value={language} />)}
+                    </datalist>
+                    <datalist id="product-region-options">
+                      {COUNTRY_OPTIONS.map(country => <option key={country} value={country} />)}
+                    </datalist>
+                  </div>
+                );
+              })()}
 
               {/* Cover Image Upload */}
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2">

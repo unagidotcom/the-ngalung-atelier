@@ -11,7 +11,7 @@ export async function handleApiRequest(req, res) {
 
     appPromise = createApp({
       serveStatic: false,
-      runStartupChecks: false
+      runStartupChecks: true
     });
   }
 

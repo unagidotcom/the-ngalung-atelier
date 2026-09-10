@@ -46,6 +46,7 @@ function mapProductRow(row: any): Product {
     testimonials: typeof row.testimonials === 'string' ? JSON.parse(row.testimonials) : row.testimonials || [],
     faqs: typeof row.faqs === 'string' ? JSON.parse(row.faqs) : row.faqs || [],
     digitalAsset: typeof row.digital_asset === 'string' ? JSON.parse(row.digital_asset) : row.digital_asset || {},
+    productMetadata: typeof row.product_metadata === 'string' ? JSON.parse(row.product_metadata) : row.product_metadata || undefined,
     badge: row.badge,
     status: row.status,
     isPublished: row.is_published,
@@ -236,15 +237,16 @@ export class PostgresStore {
             slug = $1, title = $2, tagline = $3, description = $4, category = $5,
             price_inr = $6, price_usd = $7, original_price_inr = $8, original_price_usd = $9,
             cover_image = $10, preview_images = $11, features = $12, modules = $13,
-            testimonials = $14, faqs = $15, digital_asset = $16, badge = $17,
-            status = $18, is_published = $19, featured = $20, updated_at = NOW()
-          WHERE id = $21
+            testimonials = $14, faqs = $15, digital_asset = $16, product_metadata = $17,
+            badge = $18, status = $19, is_published = $20, featured = $21, updated_at = NOW()
+          WHERE id = $22
         `, [
           updated.slug, updated.title, updated.tagline, updated.description, updated.category,
           updated.priceINR, updated.priceUSD, updated.originalPriceINR, updated.originalPriceUSD,
           updated.coverImage, JSON.stringify(updated.previewImages || []), JSON.stringify(updated.features || []),
           JSON.stringify(updated.modules || []), JSON.stringify(updated.testimonials || []),
           JSON.stringify(updated.faqs || []), JSON.stringify(updated.digitalAsset || {}),
+          JSON.stringify(updated.productMetadata || {}),
           updated.badge, updated.status, updated.isPublished, updated.featured,
           updated.id
         ]);
@@ -280,6 +282,7 @@ export class PostgresStore {
         primaryUrl: '',
         accessInstructions: ''
       },
+      productMetadata: productData.productMetadata,
       badge: productData.badge || 'NEW',
       status,
       isPublished,
@@ -296,15 +299,15 @@ export class PostgresStore {
         id, slug, title, tagline, description, category,
         price_inr, price_usd, original_price_inr, original_price_usd,
         cover_image, preview_images, features, modules, testimonials, faqs,
-        digital_asset, badge, status, is_published, featured, total_sales_count,
+        digital_asset, product_metadata, badge, status, is_published, featured, total_sales_count,
         rating_average, rating_count, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, NOW(), NOW())
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, NOW(), NOW())
     `, [
       product.id, product.slug, product.title, product.tagline, product.description, product.category,
       product.priceINR, product.priceUSD, product.originalPriceINR, product.originalPriceUSD,
       product.coverImage, JSON.stringify(product.previewImages), JSON.stringify(product.features),
       JSON.stringify(product.modules), JSON.stringify(product.testimonials), JSON.stringify(product.faqs),
-      JSON.stringify(product.digitalAsset), product.badge, product.status, product.isPublished, product.featured,
+      JSON.stringify(product.digitalAsset), JSON.stringify(product.productMetadata || {}), product.badge, product.status, product.isPublished, product.featured,
       product.totalSalesCount, product.ratingAverage, product.ratingCount
     ]);
 
