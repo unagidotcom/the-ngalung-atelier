@@ -129,18 +129,26 @@ export class FileStorageService {
   /**
    * Saves a product cover image into public storage
    */
-  static saveCoverImage(file: Express.Multer.File): { url: string; fileName: string } {
+  static async saveCoverImage(file: Express.Multer.File): Promise<{ url: string; fileName: string; storageKey: string; storageProvider: string }> {
     const imageId = 'cover_' + crypto.randomBytes(8).toString('hex');
     const ext = path.extname(file.originalname).toLowerCase() || '.jpg';
-    const storageKey = `${imageId}${ext}`;
-    const destinationPath = path.join(PUBLIC_COVERS_DIR, storageKey);
+    const storageKey = `covers/${imageId}${ext}`;
 
-    // Write image to public disk
-    fs.writeFileSync(destinationPath, file.buffer);
+    const uploadResult = await storageService.uploadPrivateFile(
+      storageKey,
+      file.buffer,
+      file.mimetype || 'application/octet-stream',
+      {
+        originalName: StorageService.sanitizeFilename(file.originalname),
+        assetType: 'coverImage'
+      }
+    );
 
     return {
-      url: `/uploads/covers/${storageKey}`,
-      fileName: file.originalname
+      url: `/api/media/cover/${Buffer.from(uploadResult.storageKey).toString('base64url')}`,
+      fileName: file.originalname,
+      storageKey: uploadResult.storageKey,
+      storageProvider: uploadResult.storageProvider
     };
   }
 

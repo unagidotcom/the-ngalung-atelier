@@ -110,6 +110,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isUploadingCover, setIsUploadingCover] = useState(false);
   const [isUploadingFile, setIsUploadingFile] = useState(false);
   const [uploadError, setUploadError] = useState('');
+  const [coverPreviewError, setCoverPreviewError] = useState(false);
   const coverInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -209,6 +210,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Product Add Action Handler
   const handleAddNewProduct = () => {
+    setCoverPreviewError(false);
     setEditingProduct({
       title: '',
       tagline: '',
@@ -244,12 +246,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setUploadError('');
     try {
       const res = await uploadCoverImage(file);
-      if (editingProduct) {
-        setEditingProduct({
-          ...editingProduct,
+      setCoverPreviewError(false);
+      setEditingProduct(current => {
+        if (!current) return current;
+        return {
+          ...current,
           coverImage: res.url
-        });
-      }
+        };
+      });
       setActionMessage('Cover image uploaded successfully.');
       setTimeout(() => setActionMessage(''), 3000);
     } catch (err: any) {
@@ -269,9 +273,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setUploadError('');
     try {
       const metadata = await uploadProductFile(file);
-      if (editingProduct) {
-        setEditingProduct({
-          ...editingProduct,
+      setEditingProduct(current => {
+        if (!current) return current;
+        return {
+          ...current,
           digitalAsset: {
             type: 'file_download',
             primaryUrl: '',
@@ -281,11 +286,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             fileSizeBytes: metadata.fileSizeBytes,
             mimeType: metadata.mimeType,
             storageKey: metadata.storageKey,
+            storageProvider: metadata.storageProvider,
+            checksumSha256: metadata.checksumSha256,
             uploadedAt: metadata.uploadedAt,
-            accessInstructions: editingProduct.digitalAsset?.accessInstructions || 'Click the download button to access your digital assets.'
+            accessInstructions: current.digitalAsset?.accessInstructions || 'Click the download button to access your digital assets.'
           }
-        });
-      }
+        };
+      });
       setActionMessage(`Digital asset "${metadata.fileName}" uploaded to private vault.`);
       setTimeout(() => setActionMessage(''), 3000);
     } catch (err: any) {
@@ -624,8 +631,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               products={products}
               onRefreshProducts={loadAllData}
               onEditProduct={p => {
+                setCoverPreviewError(false);
                 setEditingProduct({ ...p });
                 setProductFormError('');
+                setUploadError('');
               }}
               onAddNewProduct={handleAddNewProduct}
               onPreviewProduct={onPreviewProduct}
@@ -699,6 +708,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 font-semibold flex items-center gap-2">
                   <AlertCircle className="w-4 h-4" />
                   <span>{productFormError}</span>
+                </div>
+              )}
+
+              {uploadError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 font-semibold flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                  <span>{uploadError}</span>
                 </div>
               )}
 
@@ -811,12 +827,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2">
                 <label className="block font-bold text-slate-700">Cover Image</label>
                 <div className="flex items-center gap-3">
-                  {editingProduct.coverImage && (
+                  {editingProduct.coverImage && !coverPreviewError && (
                     <img
                       src={editingProduct.coverImage}
                       alt="Cover Preview"
+                      onError={() => {
+                        setCoverPreviewError(true);
+                        setUploadError('The cover image was uploaded, but the preview could not be loaded. Check that storage is configured and reachable.');
+                      }}
                       className="w-16 h-12 object-cover rounded-lg border border-slate-200"
                     />
+                  )}
+                  {editingProduct.coverImage && coverPreviewError && (
+                    <div className="flex h-12 w-16 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white text-[10px] font-bold text-slate-400">
+                      No preview
+                    </div>
                   )}
                   <input
                     type="file"
@@ -827,6 +852,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   />
                   {isUploadingCover && <RefreshCw className="w-4 h-4 animate-spin text-slate-600" />}
                 </div>
+                {editingProduct.coverImage && (
+                  <div className="text-[11px] font-mono text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200 flex items-center justify-between">
+                    <span className="truncate">Cover image attached</span>
+                    <span className="font-bold">Ready</span>
+                  </div>
+                )}
               </div>
 
               {/* Digital Product File Vault Upload */}

@@ -26,6 +26,20 @@ const API_BASE = '/api';
 const ADMIN_TOKEN_KEY = 'atelier_admin_auth_token';
 const CUSTOMER_TOKEN_KEY = 'atelier_customer_auth_token';
 
+async function readUploadResponse(res: Response): Promise<any> {
+  const text = await res.text();
+  if (!text) return {};
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return {
+      success: false,
+      message: text.slice(0, 240)
+    };
+  }
+}
+
 // In-memory token caches for fast access
 let cachedToken: string | null = null;
 let cachedCustomerToken: string | null = null;
@@ -680,8 +694,8 @@ export async function uploadCoverImage(file: File): Promise<{ url: string; fileN
     throw new Error('Unauthorized: Please log in as administrator');
   }
 
-  const data = await res.json();
-  if (!data.success) throw new Error(data.message || 'Failed to upload cover image');
+  const data = await readUploadResponse(res);
+  if (!res.ok || !data.success) throw new Error(data.message || data.error || 'Failed to upload cover image');
   return { url: data.url, fileName: data.fileName };
 }
 
@@ -702,8 +716,8 @@ export async function uploadProductFile(file: File): Promise<any> {
     throw new Error('Unauthorized: Please log in as administrator');
   }
 
-  const data = await res.json();
-  if (!data.success) throw new Error(data.message || 'Failed to upload digital product file');
+  const data = await readUploadResponse(res);
+  if (!res.ok || !data.success) throw new Error(data.message || data.error || 'Failed to upload digital product file');
   return data.metadata;
 }
 

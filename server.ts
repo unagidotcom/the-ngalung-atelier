@@ -1372,7 +1372,34 @@ ${urls.map(url => `  <url><loc>${xmlEscape(url.loc)}</loc><lastmod>${xmlEscape(n
     }
   });
 
-  // Static route for uploaded public cover images
+  // Public route for uploaded cover images stored through the active storage provider
+  app.get('/api/media/cover/:encodedKey', async (req, res) => {
+    try {
+      const storageKey = Buffer.from(req.params.encodedKey, 'base64url').toString('utf8');
+      if (!storageKey.startsWith('covers/')) {
+        return res.status(400).json({ success: false, message: 'Invalid cover image reference' });
+      }
+
+      const result = await storageService.downloadPrivateFile(storageKey);
+      res.setHeader('Content-Type', result.mimeType || 'application/octet-stream');
+      if (result.contentLength) {
+        res.setHeader('Content-Length', String(result.contentLength));
+      }
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+
+      if (result.buffer) {
+        return res.send(result.buffer);
+      }
+      if (result.stream) {
+        return result.stream.pipe(res);
+      }
+      return res.status(404).json({ success: false, message: 'Cover image not found' });
+    } catch (err: any) {
+      res.status(404).json({ success: false, message: err.message || 'Cover image not found' });
+    }
+  });
+
+  // Static route for legacy locally uploaded public cover images
   app.use('/uploads/covers', express.static(FileStorageService.getPublicCoversDir()));
 
   // 8. Secure Download File Route (Authoritative Paid Check & Private Stream)
@@ -2203,7 +2230,7 @@ ${urls.map(url => `  <url><loc>${xmlEscape(url.loc)}</loc><lastmod>${xmlEscape(n
   });
 
   // Upload Cover Image (Admin only)
-  app.post('/api/admin/upload/cover', requireAdmin, upload.single('coverImage'), (req, res) => {
+  app.post('/api/admin/upload/cover', requireAdmin, upload.single('coverImage'), async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ success: false, message: 'No image file provided' });
@@ -2214,15 +2241,22 @@ ${urls.map(url => `  <url><loc>${xmlEscape(url.loc)}</loc><lastmod>${xmlEscape(n
         return res.status(400).json({ success: false, message: validation.error });
       }
 
-      const result = FileStorageService.saveCoverImage(req.file);
+      const result = await FileStorageService.saveCoverImage(req.file);
       res.json({
         success: true,
         url: result.url,
         fileName: result.fileName,
+        storageKey: result.storageKey,
+        storageProvider: result.storageProvider,
         message: 'Cover image uploaded successfully'
       });
     } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message || 'Failed to upload cover image' });
+      console.error('[COVER UPLOAD ERROR]:', err);
+      const isConfigError = err.message?.includes('PRIVATE STORAGE NOT CONFIGURED');
+      res.status(isConfigError ? 503 : 500).json({
+        success: false,
+        message: err.message || 'Failed to upload cover image'
+      });
     }
   });
 
