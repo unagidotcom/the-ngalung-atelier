@@ -54,10 +54,8 @@ export class SupabaseStorageProvider implements IObjectStorageService {
     const found = buckets?.some(bucket => bucket.name === this.bucketName);
     if (found) return;
 
-    const maxMb = Number(process.env.MAX_PRODUCT_FILE_MB) || 100;
     const { error: createError } = await supabase.storage.createBucket(this.bucketName, {
-      public: false,
-      fileSizeLimit: maxMb * 1024 * 1024
+      public: false
     });
 
     if (createError) {
