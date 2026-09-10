@@ -457,14 +457,14 @@ export async function fetchProducts(admin = false): Promise<Product[]> {
   }
 
   const data = await res.json();
-  if (!data.success) throw new Error(data.message || 'Failed to fetch products');
+  if (!res.ok || !data.success) throw new Error(data.message || data.error || 'Failed to fetch products');
   return data.products || [];
 }
 
 export async function fetchProductBySlug(slugOrId: string): Promise<Product> {
   const res = await fetch(`${API_BASE}/products/${slugOrId}`);
   const data = await res.json();
-  if (!data.success) throw new Error(data.message || 'Product not found');
+  if (!res.ok || !data.success) throw new Error(data.message || data.error || 'Product not found');
   return data.product;
 }
 
@@ -737,7 +737,7 @@ export async function saveProduct(product: Partial<Product>): Promise<Product> {
   }
 
   const data = await res.json();
-  if (!data.success) throw new Error(data.message || 'Failed to save product');
+  if (!res.ok || !data.success) throw new Error(data.message || data.error || 'Failed to save product');
   return data.product;
 }
 
@@ -751,7 +751,7 @@ export async function fetchAdminProducts(): Promise<Product[]> {
   }
 
   const data = await res.json();
-  if (!data.success) throw new Error(data.message || 'Failed to fetch products');
+  if (!res.ok || !data.success) throw new Error(data.message || data.error || 'Failed to fetch products');
   return data.products || [];
 }
 

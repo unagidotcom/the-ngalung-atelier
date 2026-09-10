@@ -346,9 +346,10 @@ export async function createApp(options: CreateAppOptions = {}) {
   }
 
   // 3. Public Products API (Returns only published products for visitors, with gated vault data stripped)
-  app.get('/api/products', (req, res) => {
+  app.get('/api/products', async (req, res) => {
     try {
-      const all = store.getProducts();
+      const activeStore = getActiveStore();
+      const all = await activeStore.getProducts();
       const published = all.filter(p => p.isPublished).map(sanitizePublicProduct);
       res.json({ success: true, products: published });
     } catch (err: any) {
@@ -356,10 +357,11 @@ export async function createApp(options: CreateAppOptions = {}) {
     }
   });
 
-  app.get('/api/products/:slugOrId', (req, res) => {
+  app.get('/api/products/:slugOrId', async (req, res) => {
     try {
       const { slugOrId } = req.params;
-      const product = store.getProductBySlug(slugOrId) || store.getProductById(slugOrId);
+      const activeStore = getActiveStore();
+      const product = await activeStore.getProductBySlug(slugOrId) || await activeStore.getProductById(slugOrId);
       if (!product || !product.isPublished) {
         return res.status(404).json({ success: false, message: 'Product not found' });
       }
@@ -644,7 +646,8 @@ ${urls.map(url => `  <url><loc>${xmlEscape(url.loc)}</loc><lastmod>${xmlEscape(n
       }
 
       // Authoritative product retrieval from server store
-      const product = store.getProductById(targetIdOrSlug) || store.getProductBySlug(targetIdOrSlug);
+      const activeStore = getActiveStore();
+      const product = await activeStore.getProductById(targetIdOrSlug) || await activeStore.getProductBySlug(targetIdOrSlug);
       if (!product) {
         return res.status(404).json({
           success: false,
@@ -866,7 +869,8 @@ ${urls.map(url => `  <url><loc>${xmlEscape(url.loc)}</loc><lastmod>${xmlEscape(n
       }
 
       // Verify product validity and association
-      const product = store.getProductById(order.productId);
+      const activeStore = getActiveStore();
+      const product = await activeStore.getProductById(order.productId);
       if (!product) {
         return res.status(404).json({
           success: false,
@@ -1056,7 +1060,8 @@ ${urls.map(url => `  <url><loc>${xmlEscape(url.loc)}</loc><lastmod>${xmlEscape(n
         }
 
         // Security Check: Product association
-        const product = store.getProductById(order.productId) || store.getProductBySlug(order.productSlug);
+        const activeStore = getActiveStore();
+        const product = await activeStore.getProductById(order.productId) || await activeStore.getProductBySlug(order.productSlug);
         if (!product) {
           console.warn(`[RAZORPAY WEBHOOK SECURITY] Product ${order.productId} not found in catalog.`);
           return res.status(400).json({ error: 'Product association invalid' });
@@ -1285,7 +1290,7 @@ ${urls.map(url => `  <url><loc>${xmlEscape(url.loc)}</loc><lastmod>${xmlEscape(n
   app.post('/api/webhook/razorpay', handleRazorpayWebhook);
 
   // 7. Gated Protected Access Endpoint (Strict Server-Side Status Check)
-  app.get('/api/access/:token', (req, res) => {
+  app.get('/api/access/:token', async (req, res) => {
     try {
       const { token } = req.params;
       if (!token) {
@@ -1323,7 +1328,8 @@ ${urls.map(url => `  <url><loc>${xmlEscape(url.loc)}</loc><lastmod>${xmlEscape(n
         });
       }
 
-      const product = store.getProductById(order.productId);
+      const activeStore = getActiveStore();
+      const product = await activeStore.getProductById(order.productId);
       if (!product) {
         return res.status(404).json({
           valid: false,
@@ -1420,7 +1426,8 @@ ${urls.map(url => `  <url><loc>${xmlEscape(url.loc)}</loc><lastmod>${xmlEscape(n
         return res.status(403).json({ success: false, message: 'Unauthorized: Valid paid order required' });
       }
 
-      const product = store.getProductById(order.productId);
+      const activeStore = getActiveStore();
+      const product = await activeStore.getProductById(order.productId);
       if (!product) {
         return res.status(404).json({ success: false, message: 'Product not found' });
       }
@@ -2220,9 +2227,10 @@ ${urls.map(url => `  <url><loc>${xmlEscape(url.loc)}</loc><lastmod>${xmlEscape(n
   });
 
   // Admin Products List (Includes all products, published & drafts)
-  app.get('/api/admin/products', requireAdmin, (req, res) => {
+  app.get('/api/admin/products', requireAdmin, async (req, res) => {
     try {
-      const allProducts = store.getProducts();
+      const activeStore = getActiveStore();
+      const allProducts = await activeStore.getProducts();
       res.json({ success: true, products: allProducts });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
@@ -2289,7 +2297,7 @@ ${urls.map(url => `  <url><loc>${xmlEscape(url.loc)}</loc><lastmod>${xmlEscape(n
   });
 
   // Create Product (Admin only)
-  app.post('/api/products', requireAdmin, (req, res) => {
+  app.post('/api/products', requireAdmin, async (req, res) => {
     try {
       const productData = req.body as Product;
       if (!productData.title || !productData.priceINR) {
@@ -2301,32 +2309,35 @@ ${urls.map(url => `  <url><loc>${xmlEscape(url.loc)}</loc><lastmod>${xmlEscape(n
           .replace(/[^a-z0-9]+/g, '-')
           .replace(/(^-|-$)/g, '');
       }
-      const saved = store.saveProduct(productData);
+      const activeStore = getActiveStore();
+      const saved = await activeStore.saveProduct(productData);
       res.json({ success: true, product: saved });
     } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message });
+      res.status(500).json({ success: false, error: err.message, message: err.message });
     }
   });
 
   // Update Product (Admin only)
-  const handleUpdateProduct = (req: express.Request, res: express.Response) => {
+  const handleUpdateProduct = async (req: express.Request, res: express.Response) => {
     try {
       const { id } = req.params;
       const productData = { ...req.body, id } as Product;
-      const saved = store.saveProduct(productData);
+      const activeStore = getActiveStore();
+      const saved = await activeStore.saveProduct(productData);
       res.json({ success: true, product: saved });
     } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message });
+      res.status(500).json({ success: false, error: err.message, message: err.message });
     }
   };
   app.put('/api/products/:id', requireAdmin, handleUpdateProduct);
   app.put('/api/admin/products/:id', requireAdmin, handleUpdateProduct);
 
   // Archive Product (Admin only - sets status to archived / unpublishes from catalog while keeping customer access)
-  const handleArchiveProduct = (req: express.Request, res: express.Response) => {
+  const handleArchiveProduct = async (req: express.Request, res: express.Response) => {
     try {
       const { id } = req.params;
-      const result = store.archiveProduct(id);
+      const activeStore = getActiveStore();
+      const result = await activeStore.archiveProduct(id);
       if (!result.success) {
         return res.status(404).json(result);
       }
@@ -2339,10 +2350,11 @@ ${urls.map(url => `  <url><loc>${xmlEscape(url.loc)}</loc><lastmod>${xmlEscape(n
   app.post('/api/admin/products/:id/archive', requireAdmin, handleArchiveProduct);
 
   // Unpublish Product (Admin only - sets status to draft)
-  const handleUnpublishProduct = (req: express.Request, res: express.Response) => {
+  const handleUnpublishProduct = async (req: express.Request, res: express.Response) => {
     try {
       const { id } = req.params;
-      const result = store.unpublishProduct(id);
+      const activeStore = getActiveStore();
+      const result = await activeStore.unpublishProduct(id);
       if (!result.success) {
         return res.status(404).json(result);
       }
@@ -2355,10 +2367,11 @@ ${urls.map(url => `  <url><loc>${xmlEscape(url.loc)}</loc><lastmod>${xmlEscape(n
   app.post('/api/admin/products/:id/unpublish', requireAdmin, handleUnpublishProduct);
 
   // Publish Product (Admin only - sets status to published)
-  const handlePublishProduct = (req: express.Request, res: express.Response) => {
+  const handlePublishProduct = async (req: express.Request, res: express.Response) => {
     try {
       const { id } = req.params;
-      const result = store.publishProduct(id);
+      const activeStore = getActiveStore();
+      const result = await activeStore.publishProduct(id);
       if (!result.success) {
         return res.status(404).json(result);
       }
@@ -2371,10 +2384,11 @@ ${urls.map(url => `  <url><loc>${xmlEscape(url.loc)}</loc><lastmod>${xmlEscape(n
   app.post('/api/admin/products/:id/publish', requireAdmin, handlePublishProduct);
 
   // Delete Product (Admin only - blocked if paid customer purchases exist)
-  const handleDeleteProduct = (req: express.Request, res: express.Response) => {
+  const handleDeleteProduct = async (req: express.Request, res: express.Response) => {
     try {
       const { id } = req.params;
-      const result = store.deleteProduct(id);
+      const activeStore = getActiveStore();
+      const result = await activeStore.deleteProduct(id);
       if (!result.success) {
         return res.status(result.prevented ? 409 : 404).json({
           success: false,
@@ -2401,9 +2415,10 @@ ${urls.map(url => `  <url><loc>${xmlEscape(url.loc)}</loc><lastmod>${xmlEscape(n
   });
 
   // Admin All Products Catalog (includes drafts and archived)
-  app.get('/api/admin/products', requireAdmin, (req, res) => {
+  app.get('/api/admin/products', requireAdmin, async (req, res) => {
     try {
-      const products = store.getProducts();
+      const activeStore = getActiveStore();
+      const products = await activeStore.getProducts();
       res.json({ success: true, products });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
@@ -2651,7 +2666,8 @@ ${urls.map(url => `  <url><loc>${xmlEscape(url.loc)}</loc><lastmod>${xmlEscape(n
         return res.status(400).json({ success: false, message: 'Cannot send confirmation email for unpaid or cancelled orders.' });
       }
 
-      const product = store.getProductById(order.productId) || store.getProductBySlug(order.productSlug);
+      const activeStore = getActiveStore();
+      const product = await activeStore.getProductById(order.productId) || await activeStore.getProductBySlug(order.productSlug);
       if (!product) {
         return res.status(404).json({ success: false, message: 'Product record for this order could not be located.' });
       }
